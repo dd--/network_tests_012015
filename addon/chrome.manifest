@@ -1,0 +1,7 @@
+content   networktest                content/
+skin      networktest  classic/1.0   skin/
+locale    networktest  en-US         locale/en-US/
+
+overlay chrome://browser/content/browser.xul  chrome://networktest/content/browserOverlay.xul
+
+style chrome://global/content/customizeToolbar.xul chrome://networktest/skin/skin.css

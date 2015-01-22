@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+
+<RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:em="http://www.mozilla.org/2004/em-rdf#">
+
+  <Description about="urn:mozilla:install-manifest">
+    <em:id>{0670fcbc-12cc-4b9b-8549-b6bed0f20bdb}</em:id>
+    <em:name>Network tests</em:name>
+    <em:description>Some network tests</em:description>
+    <em:version>0.1</em:version>
+    <em:creator>Dragana Damjanovic</em:creator>
+    <em:type>2</em:type>
+
+    <!-- Mozilla Firefox -->
+    <em:targetApplication>
+      <Description>
+        <em:id>{ec8030f7-c20a-464f-9b0e-13a3a9e97384}</em:id>
+        <em:minVersion>34</em:minVersion>
+        <em:maxVersion>39</em:maxVersion>
+      </Description>
+    </em:targetApplication>
+  </Description>
+</RDF>

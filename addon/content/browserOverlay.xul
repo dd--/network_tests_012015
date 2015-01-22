@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet type="text/css" href="chrome://networktest/skin/browserOverlay.css" ?>
+
+<!DOCTYPE overlay SYSTEM
+  "chrome://networktest/locale/browserOverlay.dtd">
+
+<overlay id="networktest-browser-overlay"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <script type="application/x-javascript"
+    src="chrome://networktest/content/browserOverlay.js" />
+
+  <stringbundleset id="stringbundleset">
+    <stringbundle id="networktest-string-bundle"
+      src="chrome://networktest/locale/browserOverlay.properties" />
+  </stringbundleset>
+
+  <toolbarpalette id="BrowserToolbarPalette">
+    <toolbarbutton class="toolbarbutton-1 chromeclass-toolbar-additional"
+                   id="networktest-statusbarpanel"
+                   tooltiptext="&networktest;"
+                   label="&networktest;"
+                   oncommand="networktest.BrowserOverlay.sayHello();">
+                                                                     
+    </toolbarbutton>
+  </toolbarpalette>
+
+  var addonBar = document.getElementById("addon-bar");
+  if (addonBar) {
+    if (!document.getElementById("networktest-statusbarpanel")) {
+      var addonBarCloseButton = document.getElementById("addonbar-closebutton")
+      addonBar.insertItem("networktest-statusbarpanel", addonBarCloseButton.nextSibling);
+      addonBar.collapsed = false;
+    }
+  }
+</overlay>
