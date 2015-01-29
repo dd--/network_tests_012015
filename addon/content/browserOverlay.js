@@ -1,18 +1,19 @@
 /**
  * XULSchoolChrome namespace.
  */
-if ("undefined" == typeof(networktest)) {
-  var networktest = {};
+if ("undefined" == typeof(networktestrunner)) {
+  var networktestrunner = {};
 };
 
 /**
  * Controls the browser overlay for the Hello World extension.
  */
-networktest.BrowserOverlay = {
-  /**
-   * Says 'Hello' to the user.
-   */
-  sayHello : function() {
+networktestrunner.BrowserOverlay = {
+
+  runTest : function() {
+    let netTest = Components.classes["@mozilla.org/network-test;1"]
+                    .getService(Components.interfaces.NetworkTest);
+    netTest.runTest();
     let stringBundle = document.getElementById("networktest-string-bundle");
     let message = stringBundle.getString("answer");
 

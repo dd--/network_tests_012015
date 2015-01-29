@@ -1,27 +1,27 @@
 <?xml version="1.0"?>
 
-<?xml-stylesheet type="text/css" href="chrome://networktest/skin/browserOverlay.css" ?>
+<?xml-stylesheet type="text/css" href="chrome://networktestaddon/skin/browserOverlay.css" ?>
 
 <!DOCTYPE overlay SYSTEM
-  "chrome://networktest/locale/browserOverlay.dtd">
+  "chrome://networktestaddon/locale/browserOverlay.dtd">
 
 <overlay id="networktest-browser-overlay"
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
   <script type="application/x-javascript"
-    src="chrome://networktest/content/browserOverlay.js" />
+    src="chrome://networktestaddon/content/browserOverlay.js" />
 
   <stringbundleset id="stringbundleset">
     <stringbundle id="networktest-string-bundle"
-      src="chrome://networktest/locale/browserOverlay.properties" />
+      src="chrome://networktestaddon/locale/browserOverlay.properties" />
   </stringbundleset>
 
   <toolbarpalette id="BrowserToolbarPalette">
     <toolbarbutton class="toolbarbutton-1 chromeclass-toolbar-additional"
                    id="networktest-statusbarpanel"
-                   tooltiptext="&networktest;"
-                   label="&networktest;"
-                   oncommand="networktest.BrowserOverlay.sayHello();">
+                   tooltiptext="&networktestName;"
+                   label="&networktestName;"
+                   oncommand="networktestrunner.BrowserOverlay.runTest();">
                                                                      
     </toolbarbutton>
   </toolbarpalette>
