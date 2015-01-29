@@ -1,1 +1,1 @@
-/usr/bin/ccache c++ -Wall ./ServerSide.cpp ./TCPserver.cpp -o ./ServerSide -I../obj-debug/dist/nspr-include/ -L../obj-debug/nsprpub/pr/src -lnspr4 -DDEBUG -g
+/usr/bin/ccache c++ -Wall ./ServerSide.cpp ./TCPserver.cpp -o ./ServerSide -I../../obj-debug/dist/nspr-include/ -L../../obj-debug/nsprpub/pr/src -lnspr4 -DDEBUG -g
