@@ -1,20 +1,23 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set sw=2 ts=2 et ft=cpp : */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "NetworkTestImp.h"
 #include "TCP.h"
+#include "UDP.h"
 #include "mozilla/Module.h"
 #include "prlog.h"
 
 PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
-// I will give test a code:
-#define UDP_reachability "Test_1"
-#define TCP_reachability "Test_2"
-#define TCP_performanceFromServerToClient "Test_3"
-#define TCP_performanceFromClientToServer "Test_4"
-#define UDP_performanceFromServerToClient "Test_5"
-#define UDP_performanceFromClientToServer "Test_6"
+uint64_t maxBytes = (1<<21);
+uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
 uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
+uint16_t portsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
 int numberOfPorts = 6;
 
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));
@@ -56,18 +59,25 @@ NetworkTestImp::RunTest()
     return NS_ERROR_FAILURE;
   }
 
+  LOG(("Run test 1."));
+  Test1(&addr);
+
   LOG(("Run test 2."));
   Test2(&addr);
 
-  uint16_t port = 0;
+  int portInx = -1;
   for (int inx = 0; inx < numberOfPorts; inx++) {
-    if (mTCPReachabilityResults[inx]) {
-      port = ports[inx];
+    if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
+      portInx = inx;
       break;
     }
   }
-  if (port) {
-    Test3(&addr, port);
+  if (portInx != -1) {
+    Test3a(&addr, portsLocal[portInx], ports[portInx]);
+  }
+
+  if (portInx != -1) {
+    Test3b(&addr, portsLocal[portInx], ports[portInx]);
   }
   return NS_OK;
 }
@@ -104,12 +114,28 @@ NetworkTestImp::AddPort(PRNetAddr *aAddr, uint16_t aPort)
   }
 }
 
+// UDP reachability
 nsresult
 NetworkTestImp::Test1(PRNetAddr *aNetAddr)
 {
-  return NS_OK;  
+  nsresult rv;
+  for (int inx = 0; inx < numberOfPorts; inx++) {
+    LOG(("NetworkTest: Run test 1 with port %d.", ports[inx]));
+    AddPort(aNetAddr, ports[inx]);
+    UDP udp(aNetAddr, portsLocal[inx]);
+    bool testSuccess = false;
+    rv = udp.Start(1, 0, testSuccess);
+    if (NS_FAILED(rv) || !testSuccess) {
+      LOG(("NetworkTest: Run test 1 with port %d - failed.", ports[inx]));
+    } else {
+      mUDPReachabilityResults[inx] = true;
+      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", ports[inx]));
+    }
+  }
+  return NS_OK;
 }
 
+// TCP reachability
 nsresult
 NetworkTestImp::Test2(PRNetAddr *aNetAddr)
 {
@@ -129,15 +155,57 @@ NetworkTestImp::Test2(PRNetAddr *aNetAddr)
   return NS_OK;
 }
 
+// Test 3 UDP vs TCP performance from a server to a client.
 nsresult
-NetworkTestImp::Test3(PRNetAddr *aNetAddr, uint16_t aPort)
+NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
+                       uint16_t aRemotePort)
 {
-  LOG(("NetworkTest: Run test 3 with port %d.", aPort));
-  AddPort(aNetAddr, aPort);
+  LOG(("NetworkTest: Run test 3a with port %d.", aRemotePort));
+  AddPort(aNetAddr, aRemotePort);
   TCP tcp(aNetAddr);
-  return tcp.Start(3);
+  bool testSuccess = false;
+  nsresult rv;
+  for (int iter = 0; iter < 10; iter++) {
+    rv = tcp.Start(3);
+    LOG(("Rate: %llu", tcp.GetRate()));
+    if (NS_FAILED(rv)) {
+      return rv;
+    }
+    UDP udp(aNetAddr, aLocalPort);
+    rv = udp.Start(5, tcp.GetRate(), testSuccess);
+    if (NS_FAILED(rv) && !testSuccess) {
+      return rv;
+    }
+    LOG(("Rate: %llu", udp.GetRate()));
+  }
+  return rv;
 }
 
+// Test 3 UDP vs. TCP performance from a client to a server.
+nsresult
+NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
+                       uint16_t aRemotePort)
+{
+  LOG(("NetworkTest: Run test 3b with port %d.", aRemotePort));
+  AddPort(aNetAddr, aRemotePort);
+  TCP tcp(aNetAddr);
+  bool testSuccess = false;
+  nsresult rv;
+  for (int iter = 0; iter < 10; iter++) {
+    rv = tcp.Start(4);
+    LOG(("Rate: %llu", tcp.GetRate()));
+    if (NS_FAILED(rv)) {
+      return rv;
+    }
+    UDP udp(aNetAddr, aLocalPort);
+    rv = udp.Start(6, tcp.GetRate(), testSuccess);
+    if (NS_FAILED(rv) && !testSuccess) {
+      return rv;
+    }
+    LOG(("Rate: %llu", udp.GetRate()));
+  }
+  return rv;
+}
 
 static nsresult
 NetworkTestContructor(nsISupports *aOuter, REFNSIID aIID, void **aResult)

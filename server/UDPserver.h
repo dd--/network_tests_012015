@@ -4,25 +4,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef TEST_TCP_SERVER_SIDE_H__
-#define TEST_TCP_SERVER_SIDE_H__
+#ifndef TEST_UDP_SERVER_SIDE_H__
+#define TEST_UDP_SERVER_SIDE_H__
 
 #include "prio.h"
 #include "prerror.h"
+#include "prthread.h"
 
-class TCPserver
+class UDPserver
 {
 public:
-  TCPserver();
-  ~TCPserver();
+  UDPserver();
+  ~UDPserver();
   int Start(uint16_t *aPort, int aNumberOfPorts);
 
 private:
   int Init(uint16_t aPort, int aInx);
-  int Run();
-  int StartClientThread(PRFileDesc *fdClient);
 
-  PRFileDesc **mFds;
+  PRThread **mThreads;
   int mNumberOfPorts;
 };
 

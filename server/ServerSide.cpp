@@ -1,15 +1,34 @@
+/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set sw=2 ts=2 et ft=cpp : */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "TCPserver.h"
+#include "UDPserver.h"
 #include "prlog.h"
 
 PRLogModuleInfo* gServerTestLog;
-#define LOG(args) PR_LOG(gVPNLog, PR_LOG_DEBUG, args)
+#define LOG(args) PR_LOG(gServerTestLog, PR_LOG_DEBUG, args)
+
+uint64_t maxBytes = (1<<21);
+uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
 int
 main(int32_t argc, char *argv[])
 {
-  gServerTestLog = PR_NewLogModule("NetworkTestServer");
-  TCPserver tcp;
-  uint16_t ports[] = { 80, 891, 519, 2780, 4000, 443 };
+  gServerTestLog = PR_NewLogModule("NetworkTestServer2");
 
-  tcp.Start(ports, 6);
+  uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
+  int rv;
+  UDPserver udp;
+  rv = udp.Start(ports, 6);
+  if (rv) {
+    return -1;
+  }
+  TCPserver tcp;
+  rv = tcp.Start(ports, 6);
+  if (rv) {
+    return -1;
+  }
 }

@@ -1,1 +1,2 @@
-/usr/bin/ccache c++ -Wall ./ServerSide.cpp ./TCPserver.cpp -o ./ServerSide -I../../obj-debug/dist/nspr-include/ -L../../obj-debug/nsprpub/pr/src -lnspr4 -g
+MOZBUILDDIR=../../obj-debug/
+g++ -Wall ./ServerSide.cpp ./Ack.cpp ./HelpFunctions.cpp ./ClientSocket.cpp ./TCPserver.cpp ./UDPserver.cpp -o ./ServerSide -I$MOZBUILDDIR/dist/nspr-include/ -L$MOZBUILDDIR/nsprpub/pr/src -lnspr4 -g -DDEBUG
