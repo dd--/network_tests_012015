@@ -182,7 +182,7 @@ UDPserver::Init(uint16_t aPort, int aInx)
   uint16_t *port = new uint16_t(aPort);
   mThreads[aInx] = PR_CreateThread(PR_USER_THREAD, UDPSocketThread,
                                    (void *)port, PR_PRIORITY_NORMAL,
-                                   PR_LOCAL_THREAD,PR_UNJOINABLE_THREAD, 0);
+                                   PR_LOCAL_THREAD,PR_JOINABLE_THREAD, 0);
   if (!mThreads[aInx]) {
     LOG(("NetworkTest server side: Error creating a thread"));
     LogError("UDP");

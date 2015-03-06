@@ -8,6 +8,7 @@
 #include "prnetdb.h"
 #include "nsString.h"
 #include "nsAutoPtr.h"
+#include "nsIThread.h"
 
 class NetworkTestImp MOZ_FINAL : public NetworkTest
 {
@@ -15,7 +16,9 @@ public:
   NS_DECL_THREADSAFE_ISUPPORTS
 
   NetworkTestImp();
-  NS_IMETHOD RunTest();
+  NS_IMETHOD RunTest(NetworkTestListener *aListener);
+
+  void AllTests();
 
 private:
   ~NetworkTestImp();
@@ -29,8 +32,11 @@ private:
   nsresult Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
                   uint16_t aRemotePort);
 
+  void TestsFinished();
   PRAddrInfo *mAddrInfo;
   void *mIter;
   bool *mTCPReachabilityResults;
   bool *mUDPReachabilityResults;
+  nsCOMPtr<NetworkTestListener> mCallback;
+  nsCOMPtr<nsIThread> mThread;
 };

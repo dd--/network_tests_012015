@@ -24,11 +24,11 @@ main(int32_t argc, char *argv[])
   UDPserver udp;
   rv = udp.Start(ports, 6);
   if (rv) {
-    return -1;
+    return rv;
   }
   TCPserver tcp;
   rv = tcp.Start(ports, 6);
   if (rv) {
-    return -1;
+    return rv;
   }
 }

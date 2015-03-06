@@ -6,10 +6,18 @@
 
 #include "nsISupports.idl"
 
+interface NetworkTestListener;
+
 [scriptable, uuid(acd7dbad-38b1-4194-a907-faa1b8593f16)]
 interface NetworkTest : nsISupports
 {
-  void runTest();
+  void runTest(in NetworkTestListener aListener);
+};
+
+[scriptable, uuid(22d0d3e9-606b-4135-81e2-b589ffc96eb7)]
+interface NetworkTestListener : nsISupports
+{
+  void testsFinished();
 };
 
 %{C++

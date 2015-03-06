@@ -9,6 +9,7 @@
 #include "UDP.h"
 #include "mozilla/Module.h"
 #include "prlog.h"
+#include "nsThreadUtils.h"
 
 PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
@@ -37,9 +38,10 @@ NetworkTestImp::~NetworkTestImp()
   delete [] mUDPReachabilityResults;
 }
 
-NS_IMETHODIMP
-NetworkTestImp::RunTest()
+void
+NetworkTestImp::AllTests()
 {
+
   for (int inx = 0; inx < numberOfPorts; inx++) {
     mTCPReachabilityResults[inx] = false;
     mUDPReachabilityResults[inx] = false;
@@ -50,13 +52,13 @@ NetworkTestImp::RunTest()
 
   LOG(("Get host addr."));
   if (GetHostAddr(address) != 0) {
-    return NS_ERROR_FAILURE;
+    return;
   }
 
   PRNetAddr addr;
   nsresult rv = GetNextAddr(&addr);
   if (NS_FAILED(rv)) {
-    return NS_ERROR_FAILURE;
+    return;
   }
 
   LOG(("Run test 1."));
@@ -79,7 +81,33 @@ NetworkTestImp::RunTest()
   if (portInx != -1) {
     Test3b(&addr, portsLocal[portInx], ports[portInx]);
   }
+
+  LOG(("NetworkTest client side: Tests finished."));
+  NS_DispatchToMainThread(NS_NewRunnableMethod(this, &NetworkTestImp::TestsFinished));
+}
+
+NS_IMETHODIMP
+NetworkTestImp::RunTest(NetworkTestListener *aCallback)
+{
+  NS_ENSURE_ARG(aCallback);
+  mCallback = aCallback;
+  nsresult rv = NS_NewThread(getter_AddRefs(mThread),
+                             NS_NewRunnableMethod(this, &NetworkTestImp::AllTests));
+  if (NS_FAILED(rv)) {
+    LOG(("NetworkTest client side: Error creating the test thread"));
+    return rv;
+  }
   return NS_OK;
+}
+
+void
+NetworkTestImp::TestsFinished()
+{
+  LOG(("NetworkTest client side: Shutdown thread."));
+  if (mThread) {
+    mThread->Shutdown();
+  }
+  mCallback->TestsFinished();
 }
 
 int
