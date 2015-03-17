@@ -21,6 +21,8 @@ uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
 uint16_t portsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
 int numberOfPorts = 6;
 
+
+// todo pref
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));
 
 NS_IMPL_ISUPPORTS(NetworkTestImp, NetworkTest)
@@ -41,7 +43,7 @@ NetworkTestImp::~NetworkTestImp()
 void
 NetworkTestImp::AllTests()
 {
-
+  // worker thread
   for (int inx = 0; inx < numberOfPorts; inx++) {
     mTCPReachabilityResults[inx] = false;
     mUDPReachabilityResults[inx] = false;
@@ -90,6 +92,9 @@ NS_IMETHODIMP
 NetworkTestImp::RunTest(NetworkTestListener *aCallback)
 {
   NS_ENSURE_ARG(aCallback);
+  if (mCallback) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
   mCallback = aCallback;
   nsresult rv = NS_NewThread(getter_AddRefs(mThread),
                              NS_NewRunnableMethod(this, &NetworkTestImp::AllTests));
@@ -107,7 +112,10 @@ NetworkTestImp::TestsFinished()
   if (mThread) {
     mThread->Shutdown();
   }
-  mCallback->TestsFinished();
+
+  nsCOMPtr<NetworkTestListener> callback;
+  callback.swap(mCallback);
+  callback->TestsFinished();
 }
 
 int
