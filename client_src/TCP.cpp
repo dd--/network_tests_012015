@@ -314,8 +314,9 @@ TCP::Run()
           if (readBytes >= bufLen) {
             LOG(("NetworkTest TCP client: Closing: read enough bytes - %lu",
                  readBytes));
-            uint32_t rate;
-            memcpy(&rate, buf, 8);
+            uint64_t rate;
+            PR_STATIC_ASSERT(sizeof(rate) == 8);
+            memcpy(&rate, buf, sizeof (rate));
             mPktPerSec = ntohl(rate);
             PR_Close(mFd);
             mFd = nullptr;
