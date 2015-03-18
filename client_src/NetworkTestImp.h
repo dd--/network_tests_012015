@@ -21,6 +21,10 @@ public:
   void AllTests();
 
 private:
+  static const int kNumberOfPorts = 6;
+  static const uint16_t mPorts[kNumberOfPorts];
+  static const uint16_t mPortsLocal[kNumberOfPorts];
+
   ~NetworkTestImp();
   int GetHostAddr(nsAutoCString &aAddr);
   nsresult GetNextAddr(PRNetAddr *aAddr);
@@ -35,8 +39,8 @@ private:
   void TestsFinished();
   PRAddrInfo *mAddrInfo;
   void *mIter;
-  bool *mTCPReachabilityResults;
-  bool *mUDPReachabilityResults;
+  bool mTCPReachabilityResults[kNumberOfPorts];
+  bool mUDPReachabilityResults[kNumberOfPorts];
   nsCOMPtr<NetworkTestListener> mCallback;
   nsCOMPtr<nsIThread> mThread;
 };

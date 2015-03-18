@@ -17,10 +17,9 @@ PRLogModuleInfo* gClientTestLog;
 uint64_t maxBytes = (1<<21);
 uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
-uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
-uint16_t portsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
-int numberOfPorts = 6;
-
+// todo - rationale behind this list?
+const uint16_t NetworkTestImp::mPorts[] = { 4230, 2708, 891, 519, 80, 443 };
+const uint16_t NetworkTestImp::mPortsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
 
 // todo pref
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));
@@ -29,28 +28,24 @@ NS_IMPL_ISUPPORTS(NetworkTestImp, NetworkTest)
 
 NetworkTestImp::NetworkTestImp()
 {
-  mTCPReachabilityResults = new bool[numberOfPorts];
-  mUDPReachabilityResults = new bool[numberOfPorts];
+  gClientTestLog = PR_NewLogModule("NetworkTestClient");
 }
 
 NetworkTestImp::~NetworkTestImp()
 {
   PR_FreeAddrInfo(mAddrInfo);
-  delete [] mTCPReachabilityResults;
-  delete [] mUDPReachabilityResults;
 }
 
 void
 NetworkTestImp::AllTests()
 {
   // worker thread
-  for (int inx = 0; inx < numberOfPorts; inx++) {
+  for (int inx = 0; inx < kNumberOfPorts; inx++) {
     mTCPReachabilityResults[inx] = false;
     mUDPReachabilityResults[inx] = false;
   }
 
   mIter = nullptr;
-  gClientTestLog = PR_NewLogModule("NetworkTestClient");
 
   bool complete = false;
 
@@ -64,6 +59,9 @@ NetworkTestImp::AllTests()
     goto done;
   }
 
+  // should probably record if this is v4/v6
+  // should probably separate out reports from same client
+
   LOG(("Run test 1."));
   Test1(&addr);
 
@@ -72,15 +70,15 @@ NetworkTestImp::AllTests()
 
   { // scoping for declaration and goto
     int portInx = -1;
-    for (int inx = 0; inx < numberOfPorts; inx++) {
+    for (int inx = 0; inx < kNumberOfPorts; inx++) {
       if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
         portInx = inx;
         break;
       }
     }
     if (portInx != -1) {
-      Test3a(&addr, portsLocal[portInx], ports[portInx]);
-      Test3b(&addr, portsLocal[portInx], ports[portInx]);
+      Test3a(&addr, mPortsLocal[portInx], mPorts[portInx]);
+      Test3b(&addr, mPortsLocal[portInx], mPorts[portInx]);
     }
   }
 
@@ -158,17 +156,17 @@ nsresult
 NetworkTestImp::Test1(PRNetAddr *aNetAddr)
 {
   nsresult rv;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    LOG(("NetworkTest: Run test 1 with port %d.", ports[inx]));
-    AddPort(aNetAddr, ports[inx]);
-    UDP udp(aNetAddr, portsLocal[inx]);
+  for (int inx = 0; inx < kNumberOfPorts; ++inx) {
+    LOG(("NetworkTest: Run test 1 with port %d.", mPorts[inx]));
+    AddPort(aNetAddr, mPorts[inx]);
+    UDP udp(aNetAddr, mPortsLocal[inx]);
     bool testSuccess = false;
     rv = udp.Start(1, 0, testSuccess);
     if (NS_FAILED(rv) || !testSuccess) {
-      LOG(("NetworkTest: Run test 1 with port %d - failed.", ports[inx]));
+      LOG(("NetworkTest: Run test 1 with port %d - failed.", mPorts[inx]));
     } else {
       mUDPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", ports[inx]));
+      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", mPorts[inx]));
     }
   }
   return NS_OK;
@@ -179,16 +177,16 @@ nsresult
 NetworkTestImp::Test2(PRNetAddr *aNetAddr)
 {
   nsresult rv;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    LOG(("NetworkTest: Run test 2 with port %d.", ports[inx]));
-    AddPort(aNetAddr, ports[inx]);
+  for (int inx = 0; inx < kNumberOfPorts; inx++) {
+    LOG(("NetworkTest: Run test 2 with port %d.", mPorts[inx]));
+    AddPort(aNetAddr, mPorts[inx]);
     TCP tcp(aNetAddr);
     rv = tcp.Start(2);
     if (NS_FAILED(rv)) {
-      LOG(("NetworkTest: Run test 2 with port %d - failed.", ports[inx]));
+      LOG(("NetworkTest: Run test 2 with port %d - failed.", mPorts[inx]));
     } else {
       mTCPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 2 with port %d - succeeded.", ports[inx]));
+      LOG(("NetworkTest: Run test 2 with port %d - succeeded.", mPorts[inx]));
     }
   }
   return NS_OK;
