@@ -7,6 +7,8 @@
 #include "TCP.h"
 #include "prerror.h"
 
+namespace NetworkPath {
+
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
@@ -326,3 +328,5 @@ TCP::Run()
   mFd = nullptr;
   return NS_OK;
 }
+
+} // namespace NetworkPath

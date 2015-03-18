@@ -8,7 +8,7 @@
 #define TEST_TCP_CLIENT_SIDE_H__
 
 #include "prio.h"
-
+namespace NetworkPath {
 class TCP
 {
 public:
@@ -25,5 +25,5 @@ private:
   int mTestType;
   uint64_t mPktPerSec;
 };
-
+} // namespace NetworkPath
 #endif

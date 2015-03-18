@@ -11,6 +11,7 @@
 #include "prnetdb.h"
 #include <vector>
 
+namespace NetworkPath {
 class UDP
 {
 public:
@@ -64,5 +65,5 @@ private:
 
   enum PHASE mPhase;
 };
-
+} // namespace NetworkPath
 #endif

@@ -4,11 +4,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#ifndef mozilla_net_NetworkTestImp
+#define mozilla_net_NetworkTestImp
+
 #include "NetworkTest.h"
 #include "prnetdb.h"
 #include "nsString.h"
 #include "nsAutoPtr.h"
 #include "nsIThread.h"
+
+namespace NetworkPath {
 
 class NetworkTestImp MOZ_FINAL : public NetworkTest
 {
@@ -44,3 +49,6 @@ private:
   nsCOMPtr<NetworkTestListener> mCallback;
   nsCOMPtr<nsIThread> mThread;
 };
+
+} // namespace NetworkPath
+#endif // mozilla_net_NetworkTestImp

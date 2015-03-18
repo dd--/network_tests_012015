@@ -9,6 +9,7 @@
 #include <cstring>
 #include "prlog.h"
 
+namespace NetworkPath {
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
@@ -62,3 +63,4 @@ Ack::SendPkt(PRFileDesc *aFd, PRNetAddr *aNetAddr)
   }
   return 0;
 }
+} // namespace NetworkPath

@@ -11,6 +11,8 @@
 #include "prlog.h"
 #include "nsThreadUtils.h"
 
+namespace NetworkPath {
+
 PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
@@ -244,6 +246,8 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
   return rv;
 }
 
+} // namespace NetworkPath
+
 static nsresult
 NetworkTestContructor(nsISupports *aOuter, REFNSIID aIID, void **aResult)
 {
@@ -252,7 +256,7 @@ NetworkTestContructor(nsISupports *aOuter, REFNSIID aIID, void **aResult)
     return NS_ERROR_NO_AGGREGATION;
   }
 
-  nsRefPtr<NetworkTestImp> inst = new NetworkTestImp();
+  nsRefPtr<NetworkPath::NetworkTestImp> inst = new NetworkPath::NetworkTestImp();
   return inst->QueryInterface(aIID, aResult);
 }
 

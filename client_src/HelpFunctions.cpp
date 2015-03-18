@@ -10,6 +10,7 @@
 #include "nsString.h"
 #include "prlog.h"
 
+namespace NetworkPath {
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
@@ -114,5 +115,5 @@ LogError(const char *aType)
   PRErrorCode errCode = PR_GetError();
   return LogErrorWithCode(errCode, aType);
 }
-
+} // namespace NetworkPath
 

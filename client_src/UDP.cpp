@@ -71,6 +71,8 @@
  *
  */
 
+namespace NetworkPath {
+
 extern uint32_t maxTime;
 extern uint64_t maxBytes;
 
@@ -591,3 +593,5 @@ UDP::WaitForFinishTimeout()
   mPhase = TEST_FINISHED;
   return NS_OK;
 }
+
+} // namespace NetworkPath

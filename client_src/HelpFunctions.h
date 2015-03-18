@@ -10,10 +10,12 @@
 #include "nsError.h"
 #include "prerror.h"
 
+namespace NetworkPath {
+
 nsresult ErrorAccordingToNSPR(const char *aType);
 nsresult ErrorAccordingToNSPRWithCode(PRErrorCode errCode, const char *aType);
 
 int LogErrorWithCode(PRErrorCode errCode, const char *aType);
 int LogError(const char *aType);
-
+} // namespace NetworkPath
 #endif
