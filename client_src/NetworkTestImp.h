@@ -28,7 +28,6 @@ public:
 private:
   static const int kNumberOfPorts = 6;
   static const uint16_t mPorts[kNumberOfPorts];
-  static const uint16_t mPortsLocal[kNumberOfPorts];
 
   ~NetworkTestImp();
   int GetHostAddr(nsAutoCString &aAddr);
@@ -36,9 +35,9 @@ private:
   void AddPort(PRNetAddr *aAddr, uint16_t aPort);
   nsresult Test1(PRNetAddr *aNetAddr);
   nsresult Test2(PRNetAddr *aNetAddr);
-  nsresult Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
+  nsresult Test3a(PRNetAddr *aNetAddr,
                   uint16_t aRemotePort);
-  nsresult Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
+  nsresult Test3b(PRNetAddr *aNetAddr,
                   uint16_t aRemotePort);
 
   void TestsFinished();

@@ -19,10 +19,12 @@
 #define FINISH "Finish"
 #define TEST_prefix "Test_"
 
-#define RETRANSMISSION_TIMEOUT 200
-#define MAX_RETRANSMISSIONS 10
+#define RETRANSMISSION_TIMEOUT 400
+#define MAX_RETRANSMISSIONS 5
 #define SHUTDOWNTIMEOUT 1000
 #define NOPKTTIMEOUT 2000
+#define PAYLOADSIZE 1450
+#define PAYLOADSIZEF ((double) PAYLOADSIZE)
 
 /**
  *  Packet format:
@@ -92,7 +94,7 @@ int finishLen = 7;
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
-UDP::UDP(PRNetAddr *aAddr, uint16_t aLocalPort)
+UDP::UDP(PRNetAddr *aAddr)
   : mFd(nullptr)
   , mTestType(0)
   , mLastReceivedTimeout(0)
@@ -108,7 +110,6 @@ UDP::UDP(PRNetAddr *aAddr, uint16_t aLocalPort)
 {
 
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
-  mLocalPort = aLocalPort;
   mNodataTimeout = PR_MillisecondsToInterval(NOPKTTIMEOUT);
 
 }
@@ -166,17 +167,9 @@ UDP::Init()
   } else if (mNetAddr.raw.family == AF_INET6) {
     port = mNetAddr.ipv6.port;
   }
-  LOG(("NetworkTest UDP client: Remote port: %d", port));
+  LOG(("NetworkTest UDP client: Remote port: %d", ntohs(port)));
 
-  PRNetAddr addr;
-  PRNetAddrValue val = PR_IpAddrAny;
-  PRStatus status = PR_SetNetAddr(val, mNetAddr.raw.family, mLocalPort, &addr);
-  if (status != PR_SUCCESS) {
-    LogError("UDP");
-    return ErrorAccordingToNSPR("UDP");
-  }
-
-  mFd = PR_OpenUDPSocket(addr.raw.family);
+  mFd = PR_OpenUDPSocket(mNetAddr.raw.family);
   if (!mFd) {
     return ErrorAccordingToNSPR("UDP");
   }
@@ -185,7 +178,7 @@ UDP::Init()
   PRSocketOptionData opt;
   opt.option = PR_SockOpt_Nonblocking;
   opt.value.non_blocking = true;
-  status = PR_SetSocketOption(mFd, &opt);
+  PRStatus status = PR_SetSocketOption(mFd, &opt);
   if (status != PR_SUCCESS) {
     return ErrorAccordingToNSPR("UDP");
   }
@@ -198,12 +191,6 @@ UDP::Init()
     return ErrorAccordingToNSPR("UDP");
   }
   LOG(("NetworkTest UDP client: Socket options set."));
-
-  status = PR_Bind(mFd, &addr);
-  if (status != PR_SUCCESS) {
-    LogError("UDP");
-    return ErrorAccordingToNSPR("UDP");
-  }
 
   return NS_OK;
 }
@@ -342,7 +329,11 @@ UDP::StartTestSend()
     uint32_t rate = htonl(mRate);
     memcpy(buf + rateStart, &rate, rateLen);
   }
-  int count = PR_SendTo(mFd, buf, 1500, 0, &mNetAddr,
+  int payloadsize = PAYLOADSIZE - (200 * mNumberOfRetrans);
+  if (payloadsize < 512) {
+    payloadsize = 512;
+  }
+  int count = PR_SendTo(mFd, buf, payloadsize, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();
@@ -352,9 +343,8 @@ UDP::StartTestSend()
     return ErrorAccordingToNSPRWithCode(code, "UDP");
   }
 
-//  mSentBytes += count;
   LOG(("NetworkTest UDP client: Sending data for test %d"
-       " - sent %lu bytes.", mTestType,  mSentBytes));
+       " - sent %lu bytes.", mTestType,  count));
   mNextTimeToDoSomething = now +
                            PR_MillisecondsToInterval(RETRANSMISSION_TIMEOUT);
   mNumberOfRetrans++;
@@ -395,7 +385,7 @@ UDP::RunTestSend()
             memcpy(buf + finishStart, FINISH, finishLen);
             mPhase = FINISH_PACKET;
           }
-          int count = PR_SendTo(mFd, buf, 1500, 0, &mNetAddr,
+          int count = PR_SendTo(mFd, buf, PAYLOADSIZE, 0, &mNetAddr,
                                 PR_INTERVAL_NO_WAIT);
           if (count < 0) {
             PRErrorCode code = PR_GetError();
@@ -448,7 +438,7 @@ UDP::SendFinishPacket()
   PRIntervalTime now = PR_IntervalNow();
   memcpy(buf + tsStart, &now, tsLen);
   memcpy(buf + finishStart, FINISH, finishLen);
-  int count = PR_SendTo(mFd, buf, 1500, 0, &mNetAddr,
+  int count = PR_SendTo(mFd, buf, PAYLOADSIZE, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();
@@ -545,7 +535,7 @@ UDP::NewPkt(int32_t aCount, char *aBuf)
                                    PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
 
           if (PR_IntervalToSeconds(PR_IntervalNow() - mFirstPktReceived)) {
-            mRateObserved = (double)mRecvBytes / 1500.0 /
+            mRateObserved = (double)mRecvBytes / PAYLOADSIZEF /
               (double)PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived)
               * 1000.0;
           }

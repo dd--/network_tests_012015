@@ -21,7 +21,6 @@ uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
 // todo - rationale behind this list?
 const uint16_t NetworkTestImp::mPorts[] = { 4230, 2708, 891, 519, 80, 443 };
-const uint16_t NetworkTestImp::mPortsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
 
 // todo pref
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));
@@ -79,8 +78,8 @@ NetworkTestImp::AllTests()
       }
     }
     if (portInx != -1) {
-      Test3a(&addr, mPortsLocal[portInx], mPorts[portInx]);
-      Test3b(&addr, mPortsLocal[portInx], mPorts[portInx]);
+      Test3a(&addr, mPorts[portInx]);
+      Test3b(&addr, mPorts[portInx]);
     }
   }
 
@@ -161,7 +160,7 @@ NetworkTestImp::Test1(PRNetAddr *aNetAddr)
   for (int inx = 0; inx < kNumberOfPorts; ++inx) {
     LOG(("NetworkTest: Run test 1 with port %d.", mPorts[inx]));
     AddPort(aNetAddr, mPorts[inx]);
-    UDP udp(aNetAddr, mPortsLocal[inx]);
+    UDP udp(aNetAddr);
     bool testSuccess = false;
     rv = udp.Start(1, 0, testSuccess);
     if (NS_FAILED(rv) || !testSuccess) {
@@ -196,8 +195,7 @@ NetworkTestImp::Test2(PRNetAddr *aNetAddr)
 
 // Test 3 UDP vs TCP performance from a server to a client.
 nsresult
-NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
-                       uint16_t aRemotePort)
+NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aRemotePort)
 {
   LOG(("NetworkTest: Run test 3a with port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
@@ -210,7 +208,7 @@ NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
     if (NS_FAILED(rv)) {
       return rv;
     }
-    UDP udp(aNetAddr, aLocalPort);
+    UDP udp(aNetAddr);
     rv = udp.Start(5, tcp.GetRate(), testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
@@ -222,8 +220,7 @@ NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
 
 // Test 3 UDP vs. TCP performance from a client to a server.
 nsresult
-NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
-                       uint16_t aRemotePort)
+NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aRemotePort)
 {
   LOG(("NetworkTest: Run test 3b with port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
@@ -236,7 +233,7 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
     if (NS_FAILED(rv)) {
       return rv;
     }
-    UDP udp(aNetAddr, aLocalPort);
+    UDP udp(aNetAddr);
     rv = udp.Start(6, tcp.GetRate(), testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
