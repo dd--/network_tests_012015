@@ -11,55 +11,61 @@
 #include "prlog.h"
 #include "nsThreadUtils.h"
 
+namespace NetworkPath {
+
 PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
 uint64_t maxBytes = (1<<21);
 uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
-uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
-uint16_t portsLocal[] = { 4231, 2709, 892, 520, 81, 444 };
-int numberOfPorts = 6;
+// 61590 is in the ephemeral range
+// 2708 is in the reserved but no priv range
+// 891 is privd but unused
+// 443 is special
+// 80 is special
+const uint16_t NetworkTestImp::mPorts[] = { 61590, 2708, 891, 443, 80 };
 
+// todo pref
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));
 
 NS_IMPL_ISUPPORTS(NetworkTestImp, NetworkTest)
 
 NetworkTestImp::NetworkTestImp()
 {
-  mTCPReachabilityResults = new bool[numberOfPorts];
-  mUDPReachabilityResults = new bool[numberOfPorts];
+  gClientTestLog = PR_NewLogModule("NetworkTestClient");
 }
 
 NetworkTestImp::~NetworkTestImp()
 {
   PR_FreeAddrInfo(mAddrInfo);
-  delete [] mTCPReachabilityResults;
-  delete [] mUDPReachabilityResults;
 }
 
 void
 NetworkTestImp::AllTests()
 {
-
-  for (int inx = 0; inx < numberOfPorts; inx++) {
+  // worker thread
+  for (int inx = 0; inx < kNumberOfPorts; inx++) {
     mTCPReachabilityResults[inx] = false;
     mUDPReachabilityResults[inx] = false;
   }
 
   mIter = nullptr;
-  gClientTestLog = PR_NewLogModule("NetworkTestClient");
+
+  bool complete = false;
 
   LOG(("Get host addr."));
   if (GetHostAddr(address) != 0) {
-    return;
+    goto done;
   }
 
   PRNetAddr addr;
-  nsresult rv = GetNextAddr(&addr);
-  if (NS_FAILED(rv)) {
-    return;
+  if (NS_FAILED(GetNextAddr(&addr))) {
+    goto done;
   }
+
+  // should probably record if this is v4/v6
+  // should probably separate out reports from same client
 
   LOG(("Run test 1."));
   Test1(&addr);
@@ -67,22 +73,24 @@ NetworkTestImp::AllTests()
   LOG(("Run test 2."));
   Test2(&addr);
 
-  int portInx = -1;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
-      portInx = inx;
-      break;
+  { // scoping for declaration and goto
+    int portInx = -1;
+    for (int inx = 0; inx < kNumberOfPorts; inx++) {
+      if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
+        portInx = inx;
+        break;
+      }
+    }
+    if (portInx != -1) {
+      Test3a(&addr, mPorts[portInx]);
+      Test3b(&addr, mPorts[portInx]);
     }
   }
-  if (portInx != -1) {
-    Test3a(&addr, portsLocal[portInx], ports[portInx]);
-  }
 
-  if (portInx != -1) {
-    Test3b(&addr, portsLocal[portInx], ports[portInx]);
-  }
-
-  LOG(("NetworkTest client side: Tests finished."));
+  complete = true;
+  
+done:
+  LOG(("NetworkTest client side: Tests finished %s.", complete ? "ok" : "failed"));
   NS_DispatchToMainThread(NS_NewRunnableMethod(this, &NetworkTestImp::TestsFinished));
 }
 
@@ -90,6 +98,9 @@ NS_IMETHODIMP
 NetworkTestImp::RunTest(NetworkTestListener *aCallback)
 {
   NS_ENSURE_ARG(aCallback);
+  if (mCallback) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
   mCallback = aCallback;
   nsresult rv = NS_NewThread(getter_AddRefs(mThread),
                              NS_NewRunnableMethod(this, &NetworkTestImp::AllTests));
@@ -107,7 +118,10 @@ NetworkTestImp::TestsFinished()
   if (mThread) {
     mThread->Shutdown();
   }
-  mCallback->TestsFinished();
+
+  nsCOMPtr<NetworkTestListener> callback;
+  callback.swap(mCallback);
+  callback->TestsFinished();
 }
 
 int
@@ -147,17 +161,17 @@ nsresult
 NetworkTestImp::Test1(PRNetAddr *aNetAddr)
 {
   nsresult rv;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    LOG(("NetworkTest: Run test 1 with port %d.", ports[inx]));
-    AddPort(aNetAddr, ports[inx]);
-    UDP udp(aNetAddr, portsLocal[inx]);
+  for (int inx = 0; inx < kNumberOfPorts; ++inx) {
+    LOG(("NetworkTest: Run test 1 with port %d.", mPorts[inx]));
+    AddPort(aNetAddr, mPorts[inx]);
+    UDP udp(aNetAddr);
     bool testSuccess = false;
     rv = udp.Start(1, 0, testSuccess);
     if (NS_FAILED(rv) || !testSuccess) {
-      LOG(("NetworkTest: Run test 1 with port %d - failed.", ports[inx]));
+      LOG(("NetworkTest: Run test 1 with port %d - failed.", mPorts[inx]));
     } else {
       mUDPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", ports[inx]));
+      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", mPorts[inx]));
     }
   }
   return NS_OK;
@@ -168,16 +182,16 @@ nsresult
 NetworkTestImp::Test2(PRNetAddr *aNetAddr)
 {
   nsresult rv;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    LOG(("NetworkTest: Run test 2 with port %d.", ports[inx]));
-    AddPort(aNetAddr, ports[inx]);
+  for (int inx = 0; inx < kNumberOfPorts; inx++) {
+    LOG(("NetworkTest: Run test 2 with port %d.", mPorts[inx]));
+    AddPort(aNetAddr, mPorts[inx]);
     TCP tcp(aNetAddr);
     rv = tcp.Start(2);
     if (NS_FAILED(rv)) {
-      LOG(("NetworkTest: Run test 2 with port %d - failed.", ports[inx]));
+      LOG(("NetworkTest: Run test 2 with port %d - failed.", mPorts[inx]));
     } else {
       mTCPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 2 with port %d - succeeded.", ports[inx]));
+      LOG(("NetworkTest: Run test 2 with port %d - succeeded.", mPorts[inx]));
     }
   }
   return NS_OK;
@@ -185,8 +199,7 @@ NetworkTestImp::Test2(PRNetAddr *aNetAddr)
 
 // Test 3 UDP vs TCP performance from a server to a client.
 nsresult
-NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
-                       uint16_t aRemotePort)
+NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aRemotePort)
 {
   LOG(("NetworkTest: Run test 3a with port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
@@ -199,7 +212,7 @@ NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
     if (NS_FAILED(rv)) {
       return rv;
     }
-    UDP udp(aNetAddr, aLocalPort);
+    UDP udp(aNetAddr);
     rv = udp.Start(5, tcp.GetRate(), testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
@@ -211,8 +224,7 @@ NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aLocalPort,
 
 // Test 3 UDP vs. TCP performance from a client to a server.
 nsresult
-NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
-                       uint16_t aRemotePort)
+NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aRemotePort)
 {
   LOG(("NetworkTest: Run test 3b with port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
@@ -225,7 +237,7 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
     if (NS_FAILED(rv)) {
       return rv;
     }
-    UDP udp(aNetAddr, aLocalPort);
+    UDP udp(aNetAddr);
     rv = udp.Start(6, tcp.GetRate(), testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
@@ -235,26 +247,18 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
   return rv;
 }
 
+} // namespace NetworkPath
+
 static nsresult
 NetworkTestContructor(nsISupports *aOuter, REFNSIID aIID, void **aResult)
 {
-  nsresult rv;
-  NetworkTestImp *inst;
   *aResult = nullptr;
   if (nullptr != aOuter) {
-    rv = NS_ERROR_NO_AGGREGATION;
-    return rv;
+    return NS_ERROR_NO_AGGREGATION;
   }
 
-  inst = new NetworkTestImp();
-  if (nullptr == inst) {
-    rv = NS_ERROR_OUT_OF_MEMORY;
-    return rv;
-  }
-  NS_ADDREF(inst);
-  rv = inst->QueryInterface(aIID, aResult);
-  NS_RELEASE(inst);
-  return rv;
+  nsRefPtr<NetworkPath::NetworkTestImp> inst = new NetworkPath::NetworkTestImp();
+  return inst->QueryInterface(aIID, aResult);
 }
 
 NS_DEFINE_NAMED_CID(NETWORKTEST_CID);

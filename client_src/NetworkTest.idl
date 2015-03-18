@@ -17,6 +17,7 @@ interface NetworkTest : nsISupports
 [scriptable, uuid(22d0d3e9-606b-4135-81e2-b589ffc96eb7)]
 interface NetworkTestListener : nsISupports
 {
+  /* todo a string or nsresult or something would help here */
   void testsFinished();
 };
 

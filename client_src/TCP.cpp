@@ -7,6 +7,8 @@
 #include "TCP.h"
 #include "prerror.h"
 
+namespace NetworkPath {
+
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
@@ -68,7 +70,7 @@ TCP::Init()
   PR_NetAddrToString(&mNetAddr, host, sizeof(host));
   LOG(("NetworkTest TCP client: Host: %s", host));
   LOG(("NetworkTest TCP client: AF: %d", mNetAddr.raw.family));
-  int port;
+  int port = 0;
   if (mNetAddr.raw.family == AF_INET) {
     port = mNetAddr.inet.port;
   } else if (mNetAddr.raw.family == AF_INET6) {
@@ -312,8 +314,9 @@ TCP::Run()
           if (readBytes >= bufLen) {
             LOG(("NetworkTest TCP client: Closing: read enough bytes - %lu",
                  readBytes));
-            uint32_t rate;
-            memcpy(&rate, buf, 8);
+            uint64_t rate;
+            PR_STATIC_ASSERT(sizeof(rate) == 8);
+            memcpy(&rate, buf, sizeof (rate));
             mPktPerSec = ntohl(rate);
             PR_Close(mFd);
             mFd = nullptr;
@@ -326,3 +329,5 @@ TCP::Run()
   mFd = nullptr;
   return NS_OK;
 }
+
+} // namespace NetworkPath

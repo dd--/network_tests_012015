@@ -18,10 +18,13 @@
 #define TEST_prefix "Test_"
 #define FINISH "Finish"
 
-#define RETRANSMISSION_TIMEOUT 200
-#define MAX_RETRANSMISSIONS 10
+// todo this is dup'd in udp.cpp
+#define RETRANSMISSION_TIMEOUT 400
+#define MAX_RETRANSMISSIONS 5
 #define SHUTDOWNTIMEOUT 1000
 #define NOPKTTIMEOUT 2000
+#define PAYLOADSIZE 1450
+#define PAYLOADSIZEF ((double) PAYLOADSIZE)
 
 /**
  *  Packet format:
@@ -176,7 +179,7 @@ ClientSocket::RunTestSend(PRFileDesc *aFd)
             memcpy(buf + finishStart, FINISH, finishLen);
             mPhase = FINISH_PACKET;
           }
-          int count = PR_SendTo(aFd, buf, 1500, 0, &mNetAddr,
+          int count = PR_SendTo(aFd, buf, PAYLOADSIZE, 0, &mNetAddr,
                                 PR_INTERVAL_NO_WAIT);
           if (count < 0) {
             PRErrorCode code = PR_GetError();
@@ -224,6 +227,7 @@ ClientSocket::SendFinishPacket(PRFileDesc *aFd)
   }
 
   char buf[1500];
+  memset(buf, 0xa0, 1500);
   // Send a packet.
   uint32_t id = htonl(mLastPktId);
   memcpy(buf + pktIdStart, &id, pktIdLen);
@@ -310,11 +314,11 @@ ClientSocket::NewPkt(int32_t aCount, char *aBuf)
            "packet."));
 
       if (mTestType == 1) {
-        mAcksToSend.push_back(Ack(aBuf, lastReceived, true, 0));
+        mAcksToSend.push_back(Ack(aBuf, lastReceived, aCount, 0));
       } else if (mTestType == 5) {
         mNextTimeToDoSomething = lastReceived;
       } else if (mTestType == 6) {
-        mAcksToSend.push_back(Ack(aBuf, lastReceived, false, 0));
+        mAcksToSend.push_back(Ack(aBuf, lastReceived, 0, 0));
         mLastReceivedTimeout = lastReceived + mNodataTimeout;
       }
       return 0;
@@ -350,7 +354,7 @@ ClientSocket::NewPkt(int32_t aCount, char *aBuf)
       mTestType = 1;
       mPhase = WAIT_FINISH_TIMEOUT;
       // Send a reply.
-      mAcksToSend.push_back(Ack(aBuf, lastReceived, true, 0));
+      mAcksToSend.push_back(Ack(aBuf, lastReceived, aCount, 0));
       mNextTimeToDoSomething = lastReceived +
                                PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
       LOG(("NetworkTest UDP server side: Starting test %d.", mTestType));
@@ -378,7 +382,7 @@ ClientSocket::NewPkt(int32_t aCount, char *aBuf)
       mLastReceivedTimeout = lastReceived + mNodataTimeout;
     } else if (memcmp(aBuf + typeStart, UDP_performanceFromClientToServer, 6) == 0) {
 
-      mAcksToSend.push_back(Ack(aBuf, lastReceived, false, 0));
+      mAcksToSend.push_back(Ack(aBuf, lastReceived, 0, 0));
       mLastReceivedTimeout = lastReceived + mNodataTimeout;
       mFirstPktReceived = lastReceived;
       mTestType = 6;
@@ -428,7 +432,7 @@ ClientSocket::NewPkt(int32_t aCount, char *aBuf)
                                      PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
             if (!mPktPerSecObserved &&
                 PR_IntervalToSeconds(PR_IntervalNow() - mFirstPktReceived)) {
-              mPktPerSecObserved = (double)mRecvBytes / 1500.0 /
+              mPktPerSecObserved = (double)mRecvBytes / PAYLOADSIZEF /
                 (double)PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived)
                 * 1000.0;
             }
@@ -444,7 +448,7 @@ ClientSocket::NewPkt(int32_t aCount, char *aBuf)
         }
 
         // Send ack.
-        mAcksToSend.push_back(Ack(aBuf, lastReceived, false,
+        mAcksToSend.push_back(Ack(aBuf, lastReceived, 0,
                                   mPktPerSecObserved));
 
         mLastReceivedTimeout = lastReceived + mNodataTimeout;

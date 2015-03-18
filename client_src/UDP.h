@@ -11,10 +11,11 @@
 #include "prnetdb.h"
 #include <vector>
 
+namespace NetworkPath {
 class UDP
 {
 public:
-  UDP(PRNetAddr *aAddr, uint16_t aLocalPort);
+  UDP(PRNetAddr *aAddr);
   ~UDP();
   nsresult Start(int aTestType, uint32_t aRate, bool &aSucceeded);
   uint32_t GetRate() { return mRateObserved; }
@@ -32,7 +33,6 @@ private:
 private:
   PRFileDesc *mFd;
   PRNetAddr mNetAddr;
-  uint16_t mLocalPort;
   uint32_t mRate;
   uint32_t mRateObserved;
   int mTestType;
@@ -64,5 +64,5 @@ private:
 
   enum PHASE mPhase;
 };
-
+} // namespace NetworkPath
 #endif

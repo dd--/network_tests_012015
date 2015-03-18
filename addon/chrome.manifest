@@ -1,7 +1,0 @@
-content   networktestaddon                content/
-skin      networktestaddon  classic/1.0   skin/
-locale    networktestaddon  en-US         locale/en-US/
-
-overlay chrome://browser/content/browser.xul  chrome://networktestaddon/content/browserOverlay.xul
-
-style chrome://global/content/customizeToolbar.xul chrome://networktestaddon/skin/skin.css

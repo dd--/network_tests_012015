@@ -19,15 +19,18 @@ main(int32_t argc, char *argv[])
 {
   gServerTestLog = PR_NewLogModule("NetworkTestServer2");
 
-  uint16_t ports[] = { 4230, 2708, 891, 519, 80, 443 };
+  // todo this list ought to live in one place
+  uint16_t ports[] = { 61590, 2708, 891, 443, 80 };
+  const int numPorts = sizeof(ports) / sizeof(uint16_t);
+
   int rv;
   UDPserver udp;
-  rv = udp.Start(ports, 6);
+  rv = udp.Start(ports, numPorts);
   if (rv) {
     return rv;
   }
   TCPserver tcp;
-  rv = tcp.Start(ports, 6);
+  rv = tcp.Start(ports, numPorts);
   if (rv) {
     return rv;
   }

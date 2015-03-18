@@ -9,6 +9,7 @@
 
 #include "prio.h"
 
+namespace NetworkPath {
 
 extern int pktIdStart;
 extern int tsStart; //timestamp
@@ -37,5 +38,5 @@ private:
   PRIntervalTime mRecvTime;
   int mBufLen;
 };
-
+} // namespace NetworkPath
 #endif

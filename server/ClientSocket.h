@@ -28,6 +28,7 @@ public:
 private:
   PRNetAddr mNetAddr;
   int mTestType;
+  int mReplySize;
   PRIntervalTime mFirstPktSent;
   PRIntervalTime mFirstPktReceived;
   PRIntervalTime mNextTimeToDoSomething;

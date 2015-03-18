@@ -163,7 +163,8 @@ ClientThread(void *_fd)
     } else  if (pollElem.out_flags & PR_POLL_WRITE) {
 
       if (testType == 4) {
-        memcpy(buf, &pktPerSec, 8);
+        PR_STATIC_ASSERT(sizeof(pktPerSec) == 8);
+        memcpy(buf, &pktPerSec, sizeof(pktPerSec));
       }
 
       int written;
