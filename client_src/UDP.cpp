@@ -160,7 +160,7 @@ UDP::Init()
   PR_NetAddrToString(&mNetAddr, host, sizeof(host));
   LOG(("NetworkTest UDP client: Remote Host: %s", host));
   LOG(("NetworkTest UDP client: AF: %d", mNetAddr.raw.family));
-  int port;
+  int port = 0;
   if (mNetAddr.raw.family == AF_INET) {
     port = mNetAddr.inet.port;
   } else if (mNetAddr.raw.family == AF_INET6) {
