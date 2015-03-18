@@ -52,15 +52,16 @@ NetworkTestImp::AllTests()
   mIter = nullptr;
   gClientTestLog = PR_NewLogModule("NetworkTestClient");
 
+  bool complete = false;
+
   LOG(("Get host addr."));
   if (GetHostAddr(address) != 0) {
-    return;
+    goto done;
   }
 
   PRNetAddr addr;
-  nsresult rv = GetNextAddr(&addr);
-  if (NS_FAILED(rv)) {
-    return;
+  if (NS_FAILED(GetNextAddr(&addr))) {
+    goto done;
   }
 
   LOG(("Run test 1."));
@@ -69,22 +70,24 @@ NetworkTestImp::AllTests()
   LOG(("Run test 2."));
   Test2(&addr);
 
-  int portInx = -1;
-  for (int inx = 0; inx < numberOfPorts; inx++) {
-    if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
-      portInx = inx;
-      break;
+  { // scoping for declaration and goto
+    int portInx = -1;
+    for (int inx = 0; inx < numberOfPorts; inx++) {
+      if (mTCPReachabilityResults[inx] && mUDPReachabilityResults[inx]) {
+        portInx = inx;
+        break;
+      }
+    }
+    if (portInx != -1) {
+      Test3a(&addr, portsLocal[portInx], ports[portInx]);
+      Test3b(&addr, portsLocal[portInx], ports[portInx]);
     }
   }
-  if (portInx != -1) {
-    Test3a(&addr, portsLocal[portInx], ports[portInx]);
-  }
 
-  if (portInx != -1) {
-    Test3b(&addr, portsLocal[portInx], ports[portInx]);
-  }
-
-  LOG(("NetworkTest client side: Tests finished."));
+  complete = true;
+  
+done:
+  LOG(("NetworkTest client side: Tests finished %s.", complete ? "ok" : "failed"));
   NS_DispatchToMainThread(NS_NewRunnableMethod(this, &NetworkTestImp::TestsFinished));
 }
 
