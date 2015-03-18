@@ -246,23 +246,13 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aLocalPort,
 static nsresult
 NetworkTestContructor(nsISupports *aOuter, REFNSIID aIID, void **aResult)
 {
-  nsresult rv;
-  NetworkTestImp *inst;
   *aResult = nullptr;
   if (nullptr != aOuter) {
-    rv = NS_ERROR_NO_AGGREGATION;
-    return rv;
+    return NS_ERROR_NO_AGGREGATION;
   }
 
-  inst = new NetworkTestImp();
-  if (nullptr == inst) {
-    rv = NS_ERROR_OUT_OF_MEMORY;
-    return rv;
-  }
-  NS_ADDREF(inst);
-  rv = inst->QueryInterface(aIID, aResult);
-  NS_RELEASE(inst);
-  return rv;
+  nsRefPtr<NetworkTestImp> inst = new NetworkTestImp();
+  return inst->QueryInterface(aIID, aResult);
 }
 
 NS_DEFINE_NAMED_CID(NETWORKTEST_CID);
