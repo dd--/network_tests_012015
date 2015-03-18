@@ -38,6 +38,7 @@
  *     to be at the beginning). Wait for an ack. If no ack is received after
  *     RETRANSMISSION_TIMEOUT, send another packet with the same pktID but
  *     a different timestamp.
+ *     Ack will be of same size as packet it is acking
  *     States: START_TEST -> get ack -> WAIT_FINISH_TIMEOUT -> TEST_FINISHED
  *                        -> no ack -> error
  *
@@ -94,6 +95,8 @@ int finishLen = 7;
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
+char stdBuf[1500];
+
 UDP::UDP(PRNetAddr *aAddr)
   : mFd(nullptr)
   , mTestType(0)
@@ -111,6 +114,9 @@ UDP::UDP(PRNetAddr *aAddr)
 
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
   mNodataTimeout = PR_MillisecondsToInterval(NOPKTTIMEOUT);
+
+  // prevent leaking memory contents onto network
+  memset (stdBuf, 1500, 0x80);
 
 }
 
@@ -306,8 +312,6 @@ UDP::Run()
 nsresult
 UDP::StartTestSend()
 {
-  char buf[1500];
-
   LOG(("NetworkTest UDP client: retransmissions: %d", mNumberOfRetrans));
   if (mNumberOfRetrans > MAX_RETRANSMISSIONS) {
     mError = true;
@@ -317,23 +321,23 @@ UDP::StartTestSend()
 
   // Send a packet.
   uint32_t id = htonl(mNextPktId);
-  memcpy(buf + pktIdStart, &id, pktIdLen);
+  memcpy(stdBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(buf + tsStart, &now, tsLen);
-  memcpy(buf + typeStart,
+  memcpy(stdBuf + tsStart, &now, tsLen);
+  memcpy(stdBuf + typeStart,
          (mTestType == 1) ? UDP_reachability :
          (mTestType == 5) ? UDP_performanceFromServerToClient :
          UDP_performanceFromClientToServer, typeLen);
 
   if (mTestType == 5) {
     uint32_t rate = htonl(mRate);
-    memcpy(buf + rateStart, &rate, rateLen);
+    memcpy(stdBuf + rateStart, &rate, rateLen);
   }
   int payloadsize = PAYLOADSIZE - (200 * mNumberOfRetrans);
   if (payloadsize < 512) {
     payloadsize = 512;
   }
-  int count = PR_SendTo(mFd, buf, payloadsize, 0, &mNetAddr,
+  int count = PR_SendTo(mFd, stdBuf, payloadsize, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();

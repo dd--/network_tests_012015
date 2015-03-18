@@ -8,10 +8,13 @@
 #include "HelpFunctions.h"
 #include <cstring>
 
-Ack::Ack(char *aBuf, PRIntervalTime aRecv, bool aLargeAck, uint32_t aRate)
+Ack::Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint32_t aRate)
 {
   if (aLargeAck) {
-    mBufLen = 1500;
+    if (aLargeAck < 512) {
+      aLargeAck = 512;
+    }
+    mBufLen = aLargeAck;
   } else if (aRate) {
     mBufLen = pktIdLen + tsLen + delayLen + rateLen;
   } else {

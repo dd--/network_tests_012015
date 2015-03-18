@@ -19,8 +19,12 @@ PRLogModuleInfo* gClientTestLog;
 uint64_t maxBytes = (1<<21);
 uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 
-// todo - rationale behind this list?
-const uint16_t NetworkTestImp::mPorts[] = { 4230, 2708, 891, 519, 80, 443 };
+// 61590 is in the ephemeral range
+// 2708 is in the reserved but no priv range
+// 891 is privd but unused
+// 443 is special
+// 80 is special
+const uint16_t NetworkTestImp::mPorts[] = { 61590, 2708, 891, 443, 80 };
 
 // todo pref
 static nsAutoCString address(NS_LITERAL_CSTRING("localhost"));

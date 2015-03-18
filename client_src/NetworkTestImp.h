@@ -26,7 +26,7 @@ public:
   void AllTests();
 
 private:
-  static const int kNumberOfPorts = 6;
+  static const int kNumberOfPorts = 5;
   static const uint16_t mPorts[kNumberOfPorts];
 
   ~NetworkTestImp();

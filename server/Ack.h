@@ -24,7 +24,7 @@ extern int rateLen;
 class Ack
 {
 public:
-  Ack(char *aBuf, PRIntervalTime aRecv, bool aLargeAck, uint32_t aRate);
+  Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint32_t aRate);
   ~Ack();
   Ack(const Ack &other);
   Ack& operator= (const Ack &other);
