@@ -33,12 +33,12 @@ private:
   int GetHostAddr(nsAutoCString &aAddr);
   nsresult GetNextAddr(PRNetAddr *aAddr);
   void AddPort(PRNetAddr *aAddr, uint16_t aPort);
-  nsresult Test1(PRNetAddr *aNetAddr);
-  nsresult Test2(PRNetAddr *aNetAddr);
-  nsresult Test3a(PRNetAddr *aNetAddr,
-                  uint16_t aRemotePort);
-  nsresult Test3b(PRNetAddr *aNetAddr,
-                  uint16_t aRemotePort);
+  nsresult UdpReachability(PRNetAddr *aNetAddr);
+  nsresult TcpReachability(PRNetAddr *aNetAddr);
+  nsresult UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
+                                                 uint16_t aRemotePort);
+  nsresult UdpVsTcpPerformanceFromClientToServer(PRNetAddr *aNetAddr,
+                                                 uint16_t aRemotePort);
 
   void TestsFinished();
   PRAddrInfo *mAddrInfo;

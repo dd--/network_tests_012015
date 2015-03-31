@@ -17,7 +17,7 @@ PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
 uint64_t maxBytes = (1<<21);
-uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
+uint32_t maxTime = 4; //TODO:change this to 12s or better make it dependent on the rate
 
 // 61590 is in the ephemeral range
 // 2708 is in the reserved but no priv range
@@ -67,11 +67,9 @@ NetworkTestImp::AllTests()
   // should probably record if this is v4/v6
   // should probably separate out reports from same client
 
-  LOG(("Run test 1."));
-  Test1(&addr);
+  UdpReachability(&addr);
 
-  LOG(("Run test 2."));
-  Test2(&addr);
+  TcpReachability(&addr);
 
   { // scoping for declaration and goto
     int portInx = -1;
@@ -82,8 +80,8 @@ NetworkTestImp::AllTests()
       }
     }
     if (portInx != -1) {
-      Test3a(&addr, mPorts[portInx]);
-      Test3b(&addr, mPorts[portInx]);
+      UdpVsTcpPerformanceFromServerToClient(&addr, mPorts[portInx]);
+      UdpVsTcpPerformanceFromClientToServer(&addr, mPorts[portInx]);
     }
   }
 
@@ -158,20 +156,23 @@ NetworkTestImp::AddPort(PRNetAddr *aAddr, uint16_t aPort)
 
 // UDP reachability
 nsresult
-NetworkTestImp::Test1(PRNetAddr *aNetAddr)
+NetworkTestImp::UdpReachability(PRNetAddr *aNetAddr)
 {
   nsresult rv;
   for (int inx = 0; inx < kNumberOfPorts; ++inx) {
-    LOG(("NetworkTest: Run test 1 with port %d.", mPorts[inx]));
+    LOG(("NetworkTest: Testing udp reachability on port %d.", mPorts[inx]));
     AddPort(aNetAddr, mPorts[inx]);
     UDP udp(aNetAddr);
     bool testSuccess = false;
+    // This is test number 1.
     rv = udp.Start(1, 0, testSuccess);
     if (NS_FAILED(rv) || !testSuccess) {
-      LOG(("NetworkTest: Run test 1 with port %d - failed.", mPorts[inx]));
+      LOG(("NetworkTest: Testing udp reachability on port %d - failed.",
+           mPorts[inx]));
     } else {
       mUDPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 1 with port %d - succeeded.", mPorts[inx]));
+      LOG(("NetworkTest: Testing udp reachability on port %d - succeeded.",
+           mPorts[inx]));
     }
   }
   return NS_OK;
@@ -179,36 +180,43 @@ NetworkTestImp::Test1(PRNetAddr *aNetAddr)
 
 // TCP reachability
 nsresult
-NetworkTestImp::Test2(PRNetAddr *aNetAddr)
+NetworkTestImp::TcpReachability(PRNetAddr *aNetAddr)
 {
   nsresult rv;
   for (int inx = 0; inx < kNumberOfPorts; inx++) {
-    LOG(("NetworkTest: Run test 2 with port %d.", mPorts[inx]));
+    LOG(("NetworkTest: Testing tcp reachability on port %d.", mPorts[inx]));
     AddPort(aNetAddr, mPorts[inx]);
     TCP tcp(aNetAddr);
+    // This is test 2.
     rv = tcp.Start(2);
     if (NS_FAILED(rv)) {
-      LOG(("NetworkTest: Run test 2 with port %d - failed.", mPorts[inx]));
+      LOG(("NetworkTest: Testing tcp reachability on port %d - failed.",
+           mPorts[inx]));
     } else {
       mTCPReachabilityResults[inx] = true;
-      LOG(("NetworkTest: Run test 2 with port %d - succeeded.", mPorts[inx]));
+      LOG(("NetworkTest: Testing tcp reachability on port %d - succeeded.",
+           mPorts[inx]));
     }
   }
   return NS_OK;
 }
 
-// Test 3 UDP vs TCP performance from a server to a client.
+// UDP vs TCP performance from a server to a client.
 nsresult
-NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aRemotePort)
+NetworkTestImp::UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
+                                                      uint16_t aRemotePort)
 {
-  LOG(("NetworkTest: Run test 3a with port %d.", aRemotePort));
+  LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
+       "client on port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
   TCP tcp(aNetAddr);
   bool testSuccess = false;
   nsresult rv;
   for (int iter = 0; iter < 10; iter++) {
     rv = tcp.Start(3);
-    LOG(("Rate: %llu", tcp.GetRate()));
+    LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
+         "client on port %d iteration %d - achieved tcp rate: %llu",
+         aRemotePort, iter, tcp.GetRate()));
     if (NS_FAILED(rv)) {
       return rv;
     }
@@ -217,23 +225,29 @@ NetworkTestImp::Test3a(PRNetAddr *aNetAddr, uint16_t aRemotePort)
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
     }
-    LOG(("Rate: %llu", udp.GetRate()));
+    LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
+         " client on port %d iteration - achieved udp rate: %llu",
+         aRemotePort, iter, udp.GetRate()));
   }
   return rv;
 }
 
-// Test 3 UDP vs. TCP performance from a client to a server.
+// UDP vs. TCP performance from a client to a server.
 nsresult
-NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aRemotePort)
+NetworkTestImp::UdpVsTcpPerformanceFromClientToServer(PRNetAddr *aNetAddr,
+                                                      uint16_t aRemotePort)
 {
-  LOG(("NetworkTest: Run test 3b with port %d.", aRemotePort));
+  LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
+       "server on port %d.", aRemotePort));
   AddPort(aNetAddr, aRemotePort);
   TCP tcp(aNetAddr);
   bool testSuccess = false;
   nsresult rv;
   for (int iter = 0; iter < 10; iter++) {
     rv = tcp.Start(4);
-    LOG(("Rate: %llu", tcp.GetRate()));
+    LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
+         "server on port %d iteration %d - achieved tcp rate: %llu",
+         aRemotePort, iter, tcp.GetRate()));
     if (NS_FAILED(rv)) {
       return rv;
     }
@@ -242,7 +256,9 @@ NetworkTestImp::Test3b(PRNetAddr *aNetAddr, uint16_t aRemotePort)
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
     }
-    LOG(("Rate: %llu", udp.GetRate()));
+    LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
+         "server on port %d iteration %d - achieved udp rate: %llu",
+         aRemotePort, iter, udp.GetRate()));
   }
   return rv;
 }
