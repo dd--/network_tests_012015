@@ -33,6 +33,8 @@ private:
 private:
   PRFileDesc *mFd;
   PRNetAddr mNetAddr;
+  char sendBuf[1500];
+  char recvBuf[1500];
   uint32_t mRate;
   uint32_t mRateObserved;
   int mTestType;

@@ -226,7 +226,7 @@ NetworkTestImp::UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
       return rv;
     }
     LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
-         " client on port %d iteration - achieved udp rate: %llu",
+         " client on port %d iteration %d - achieved udp rate: %llu",
          aRemotePort, iter, udp.GetRate()));
   }
   return rv;

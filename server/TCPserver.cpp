@@ -11,6 +11,7 @@
 #include "prlog.h"
 #include "prthread.h"
 #include "prmem.h"
+#include "prrng.h"
 #include <cstring>
 
 extern PRLogModuleInfo* gServerTestLog;
@@ -43,6 +44,7 @@ ClientThread(void *_fd)
   uint64_t recvBytesForRate = 0;
   uint32_t  bufLen = 1500;
   char buf[bufLen];
+  PR_GetRandomNoise(&buf, sizeof(buf));
   PRIntervalTime timeFirstPktReceived = 0;
   PRIntervalTime startRateCalc = 0;
   uint64_t pktPerSec = 0;

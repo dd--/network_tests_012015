@@ -6,6 +6,7 @@
 
 #include "TCP.h"
 #include "prerror.h"
+#include "prrng.h"
 
 namespace NetworkPath {
 
@@ -166,6 +167,7 @@ TCP::Run()
   PRIntervalTime startRateCalc = 0;
   uint16_t bufLen = 1500;
   char buf[bufLen];
+  PR_GetRandomNoise(&buf, sizeof(buf));
   switch (mTestType) {
     case 2:
       memcpy(buf, TCP_reachability, 6);

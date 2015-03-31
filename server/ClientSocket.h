@@ -28,6 +28,8 @@ public:
 private:
   PRNetAddr mNetAddr;
   int mTestType;
+  char sendBuf[1500];
+  char recvBuf[1500];
   int mReplySize;
   PRIntervalTime mFirstPktSent;
   PRIntervalTime mFirstPktReceived;

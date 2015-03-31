@@ -10,6 +10,7 @@
 #include <math.h>
 #include <cstring>
 #include "prlog.h"
+#include "prrng.h"
 
 // I will give test a code:
 #define UDP_reachability "Test_1"
@@ -103,7 +104,7 @@ ClientSocket::ClientSocket(PRNetAddr *aAddr)
 
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
   mNodataTimeout = PR_MillisecondsToInterval(NOPKTTIMEOUT);
-
+  PR_GetRandomNoise(&sendBuf, sizeof(sendBuf));
 }
 
 int
@@ -162,11 +163,10 @@ ClientSocket::RunTestSend(PRFileDesc *aFd)
 
         now = PR_IntervalNow();
         while (mNextTimeToDoSomething < now) {
-          char buf[1500];
           uint32_t id = htonl(mNextPktId);
-          memcpy(buf + pktIdStart, &id, pktIdLen);
+          memcpy(sendBuf + pktIdStart, &id, pktIdLen);
           now = PR_IntervalNow();
-          memcpy(buf + tsStart, &now, tsLen);
+          memcpy(sendBuf + tsStart, &now, tsLen);
 
           if ((mSentBytes >= maxBytes) &&
               (mFirstPktSent &&
@@ -176,10 +176,10 @@ ClientSocket::RunTestSend(PRFileDesc *aFd)
                  PR_IntervalToSeconds(now - mFirstPktSent), mSentBytes,
                  maxBytes));
             mLastPktId = mNextPktId;
-            memcpy(buf + finishStart, FINISH, finishLen);
+            memcpy(sendBuf + finishStart, FINISH, finishLen);
             mPhase = FINISH_PACKET;
           }
-          int count = PR_SendTo(aFd, buf, PAYLOADSIZE, 0, &mNetAddr,
+          int count = PR_SendTo(aFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
                                 PR_INTERVAL_NO_WAIT);
           if (count < 0) {
             PRErrorCode code = PR_GetError();
@@ -226,15 +226,13 @@ ClientSocket::SendFinishPacket(PRFileDesc *aFd)
     return 0;
   }
 
-  char buf[1500];
-  memset(buf, 0xa0, 1500);
   // Send a packet.
   uint32_t id = htonl(mLastPktId);
-  memcpy(buf + pktIdStart, &id, pktIdLen);
+  memcpy(sendBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(buf + tsStart, &now, tsLen);
-  memcpy(buf + finishStart, FINISH, finishLen);
-  int count = PR_SendTo(aFd, buf, 1500, 0, &mNetAddr,
+  memcpy(sendBuf + tsStart, &now, tsLen);
+  memcpy(sendBuf + finishStart, FINISH, finishLen);
+  int count = PR_SendTo(aFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();

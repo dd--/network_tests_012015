@@ -17,7 +17,7 @@ uint32_t maxTime = 4; //TODO:chnge tthis to the 12s
 int
 main(int32_t argc, char *argv[])
 {
-  gServerTestLog = PR_NewLogModule("NetworkTestServer2");
+  gServerTestLog = PR_NewLogModule("NetworkTestServer");
 
   // todo this list ought to live in one place
   uint16_t ports[] = { 61590, 2708, 891, 443, 80 };

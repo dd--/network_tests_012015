@@ -95,8 +95,6 @@ int finishLen = 7;
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
-char stdBuf[1500];
-
 UDP::UDP(PRNetAddr *aAddr)
   : mFd(nullptr)
   , mTestType(0)
@@ -115,8 +113,7 @@ UDP::UDP(PRNetAddr *aAddr)
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
   mNodataTimeout = PR_MillisecondsToInterval(NOPKTTIMEOUT);
 
-  // prevent leaking memory contents onto network
-  memset (stdBuf, 1500, 0x80);
+  PR_GetRandomNoise(&sendBuf, sizeof(sendBuf));
 
 }
 
@@ -231,8 +228,6 @@ UDP::Run()
   pollElem.in_flags = PR_POLL_READ | PR_POLL_EXCEPT;
 
   mPhase = START_TEST;
-  char buf[1500];
-  
 
   nsresult rv = NS_OK;
   while (NS_SUCCEEDED(rv)) {
@@ -289,7 +284,7 @@ UDP::Run()
     if (pollElem.out_flags & PR_POLL_READ) {
       PRNetAddr prAddr;
       int32_t count;
-      count = PR_RecvFrom(mFd, buf, sizeof(buf), 0, &prAddr,
+      count = PR_RecvFrom(mFd, recvBuf, sizeof(recvBuf), 0, &prAddr,
                           PR_INTERVAL_NO_WAIT);
 
       if (count < 0) {
@@ -300,7 +295,7 @@ UDP::Run()
         rv = ErrorAccordingToNSPRWithCode(code, "UDP");
         continue;
       }
-      rv = NewPkt(count, buf);
+      rv = NewPkt(count, recvBuf);
     }
   }
 
@@ -321,23 +316,23 @@ UDP::StartTestSend()
 
   // Send a packet.
   uint32_t id = htonl(mNextPktId);
-  memcpy(stdBuf + pktIdStart, &id, pktIdLen);
+  memcpy(sendBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(stdBuf + tsStart, &now, tsLen);
-  memcpy(stdBuf + typeStart,
+  memcpy(sendBuf + tsStart, &now, tsLen);
+  memcpy(sendBuf + typeStart,
          (mTestType == 1) ? UDP_reachability :
          (mTestType == 5) ? UDP_performanceFromServerToClient :
          UDP_performanceFromClientToServer, typeLen);
 
   if (mTestType == 5) {
     uint32_t rate = htonl(mRate);
-    memcpy(stdBuf + rateStart, &rate, rateLen);
+    memcpy(sendBuf + rateStart, &rate, rateLen);
   }
   int payloadsize = PAYLOADSIZE - (200 * mNumberOfRetrans);
   if (payloadsize < 512) {
     payloadsize = 512;
   }
-  int count = PR_SendTo(mFd, stdBuf, payloadsize, 0, &mNetAddr,
+  int count = PR_SendTo(mFd, sendBuf, payloadsize, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();
@@ -373,12 +368,11 @@ UDP::RunTestSend()
         //LOG(("NetworkTest UDP client: Sending packets test 6."));
         now = PR_IntervalNow();
         while (mNextTimeToDoSomething < now) {
-          char buf[1500];
-          PR_GetRandomNoise(&buf, sizeof(buf));
+          PR_GetRandomNoise(&sendBuf, sizeof(sendBuf));
           uint32_t id = htonl(mNextPktId);
-          memcpy(buf + pktIdStart, &id, pktIdLen);
+          memcpy(sendBuf + pktIdStart, &id, pktIdLen);
           now = PR_IntervalNow();
-          memcpy(buf + tsStart, &now, tsLen);
+          memcpy(sendBuf + tsStart, &now, tsLen);
           if ((mSentBytes >= maxBytes) && mFirstPktSent &&
               (PR_IntervalToSeconds(now - mFirstPktSent) >= maxTime)) {
             LOG(("Test 6 finished: time %lu, first packet sent %lu, "
@@ -386,10 +380,10 @@ UDP::RunTestSend()
                  PR_IntervalToSeconds(now - mFirstPktSent), mSentBytes,
                  maxBytes));
             mLastPktId = mNextPktId;
-            memcpy(buf + finishStart, FINISH, finishLen);
+            memcpy(sendBuf + finishStart, FINISH, finishLen);
             mPhase = FINISH_PACKET;
           }
-          int count = PR_SendTo(mFd, buf, PAYLOADSIZE, 0, &mNetAddr,
+          int count = PR_SendTo(mFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
                                 PR_INTERVAL_NO_WAIT);
           if (count < 0) {
             PRErrorCode code = PR_GetError();
@@ -435,14 +429,13 @@ UDP::SendFinishPacket()
     return NS_OK;
   }
 
-  char buf[1500];
   // Send a packet.
   uint32_t id = htonl(mLastPktId);
-  memcpy(buf + pktIdStart, &id, pktIdLen);
+  memcpy(sendBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(buf + tsStart, &now, tsLen);
-  memcpy(buf + finishStart, FINISH, finishLen);
-  int count = PR_SendTo(mFd, buf, PAYLOADSIZE, 0, &mNetAddr,
+  memcpy(sendBuf + tsStart, &now, tsLen);
+  memcpy(sendBuf + finishStart, FINISH, finishLen);
+  int count = PR_SendTo(mFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();
@@ -543,6 +536,12 @@ UDP::NewPkt(int32_t aCount, char *aBuf)
               (double)PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived)
               * 1000.0;
           }
+          LOG(("Test 5 finished: time %lu, first packet sent %lu, "
+               "duration %lu, received %llu",
+               PR_IntervalNow(),
+               mFirstPktReceived,
+               PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived),
+               mRecvBytes));
         }
       }
       mLastReceivedTimeout = lastReceived + mNodataTimeout;
