@@ -9,88 +9,61 @@
 #include "HelpFunctions.h"
 #include <math.h>
 #include <cstring>
+#include <stdio.h>
 #include "prlog.h"
 #include "prrng.h"
+#include "nsIFile.h"
 
-// I will give test a code:
-#define UDP_reachability "Test_1"
-#define UDP_performanceFromServerToClient "Test_5"
-#define UDP_performanceFromClientToServer "Test_6"
-#define FINISH "Finish"
-#define TEST_prefix "Test_"
-
-#define RETRANSMISSION_TIMEOUT 400
-#define MAX_RETRANSMISSIONS 5
-#define SHUTDOWNTIMEOUT 1000
-#define NOPKTTIMEOUT 2000
-#define PAYLOADSIZE 1450
-#define PAYLOADSIZEF ((double) PAYLOADSIZE)
+#define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+#define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
 /**
- *  Packet format:
- *    packet id : 4bytes
- *    timestamp: 4bytes
- *    packet type ("Type_...") or time elapse on receiver for acks.
- *    rate fore test 5.
+ *  Packet formats are described in the config.h file.
  *
  *  Test 1:
  *   - send a packet that starts with "pkdID,ts,Test_1" (maybe we move this not
  *     to be at the beginning). Wait for an ack. If no ack is received after
  *     RETRANSMISSION_TIMEOUT, send another packet with the same pktID but
  *     a different timestamp.
- *     Ack will be of same size as packet it is acking
+ *     Ack will have the same size as the packet it is acking
  *     States: START_TEST -> get ack -> WAIT_FINISH_TIMEOUT -> TEST_FINISHED
  *                        -> no ack -> error
  *
  *  Test 5:
- *   - send a packet that starts with "pkdID,ts,Test_5" followed by 4 byte int
- *     rate in packets per second mPktPerSec. If no packet is received after
- *     RETRANSMISSION_TIMEOUT send another packet with the same pktID but
- *     different timestamp.
+ *   - send a packet that starts with "pkdID,ts,Test_5" followed by a 8 bytes
+ *     long rate in packets per second mPktPerSec and a file name (zeroended).
+ *     If no packet is received after RETRANSMISSION_TIMEOUT send another packet
+ *     with the same pktID but a different timestamp.
  *   - If no packet is received from the server after MAX_RETRANSMISSIONS return
  *     NS_ERROR_FAILURE.
- *   - Receive and ack packets coming from the server.If no packet is received
- *     for NOPKTTIMEOUT seconds close the connection and return NS_OK.
+ *   - Receive and ack packets coming from the server. If no packet is received
+ *     for NOPKTTIMEOUT close the connection and return NS_OK.
  *     States: START_TEST -> get ack -> RUN_TEST
  *                        -> no ack -> error
  *             RUN_TEST -> receiving data ->(received FINISH) -> WAIT_FINISH_TIMEOUT -> TEST_FINISHED
  *                      -> no packets for some time-> error
  *
  *  Test 6:
- *   - send a packet that start with "pkdID,ts,Test_6". If no packet is received
- *     after RETRANSMISSION_TIMEOUT send another packet with the same pktID but
- *     different timestamp.
+ *   - send a packet that start with "pkdID,ts,Test_6".
+ *     If no packet is received after RETRANSMISSION_TIMEOUT send another packet
+ *     with the same pktID but a different timestamp.
  *   - If no packet is received from the server after MAX_RETRANSMISSIONS return
  *     NS_ERROR_FAILURE.
- *   - Send packet at rate mPktPerSec and receive ack. After max(maxBytes, maxTime)
- *     packets are sent, stop sending data and wait for anouther SHUTDOWNTIMEOUT
- *     seconds for incoming acks.*
+ *   - Send packet at rate mPktPerSec and receive ack. After max(MAXBYTES, MAXTIME)
+ *     packets has been sent, stop sending data and wait for another
+ *     SHUTDOWNTIMEOUT for incoming acks. Also send a FINISH_PACKET
  *     States: START_TEST -> get ack -> RUN_TEST
  *                        -> no ack -> error
  *             RUN_TEST -> sending data -> (send enough data) -> FINISH_PACKET
  *                      -> no acks for some time -> error
  *             FINISH_PACKET -> received ack (this ack contains observed rate) -> WAIT_FINISH_TIMEOUT -> TEST_FINISHED
- *                           -> no acks for some time -> error
+ *                           -> no acks for RETRANSMISSION_TIMEOUT retransmit FINISH_PACKET
+ *                           -> no acks for MAX_RETRANSMISSIONS -> error
+ *
  *
  */
 
 namespace NetworkPath {
-
-extern uint32_t maxTime;
-extern uint64_t maxBytes;
-
-int pktIdStart = 0;
-int tsStart = 4; //timestamp
-int typeStart = 8; //type.
-int delayStart = 8; //delay.
-int rateStart = 15;
-int pktIdLen = 4;
-int tsLen = 4; //timestamp
-int typeLen = 7; //type.
-int delayLen = 4; //delay.
-int rateLen = 8;
-int finishStart = 8;
-int finishLen = 7;
 
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
@@ -108,12 +81,13 @@ UDP::UDP(PRNetAddr *aAddr)
   , mNextPktId(0)
   , mLastPktId(0)
   , mError(false)
+  , mLogFile(nullptr)
 {
 
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
   mNodataTimeout = PR_MillisecondsToInterval(NOPKTTIMEOUT);
 
-  PR_GetRandomNoise(&sendBuf, sizeof(sendBuf));
+  PR_GetRandomNoise(&mSendBuf, sizeof(mSendBuf));
 
 }
 
@@ -122,17 +96,21 @@ UDP::~UDP()
   if (mFd) {
     PR_Close(mFd);
   }
+  if (mLogFile) {
+    PR_Close(mLogFile);
+  }
 }
 
 nsresult
-UDP::Start(int aTestType, uint32_t aRate, bool &aSucceeded)
+UDP::Start(int aTestType, uint64_t aRate, nsCString aFileName,
+           bool &aSucceeded)
 {
   aSucceeded = false;
   mTestType = aTestType;
   mRate = aRate;
   if (mRate) {
-    mPktInterval = 1000000000 / mRate; // in nanosecond.
-    LOG(("NetworkTest UDP client side: Test %d: rate %d interval %lf.",
+    mPktInterval = 1000000000.0 / mRate; // in nanosecond.
+    LOG(("NetworkTest UDP client side: Test %d: rate %llu interval %lf.",
          mTestType, mRate, mPktInterval));
   }
   nsresult rv = Init();
@@ -144,10 +122,30 @@ UDP::Start(int aTestType, uint32_t aRate, bool &aSucceeded)
     return rv;
   }
 
+  if (aTestType == 5) {
+    mLogFileName = aFileName;
+  } else if (aTestType == 6) {
+    mLogFileName = aFileName;
+    //  We collect data on the sender side
+    mLogFile = OpenTmpFileForDataCollection(aFileName);
+    if (!mLogFile) {
+      if (mFd) {
+        PR_Close(mFd);
+        mFd = nullptr;
+      }
+      return rv;
+    }
+    LogLogFormat();
+  }
+
   rv = Run();
   if(mFd) {
     PR_Close(mFd);
     mFd = nullptr;
+  }
+  if (mLogFile) {
+    PR_Close(mLogFile);
+    mLogFile = nullptr;
   }
   if (NS_SUCCEEDED(rv) && !mError) {
     aSucceeded = true;
@@ -160,10 +158,11 @@ UDP::Init()
 {
 
   LOG(("NetworkTest UDP client: Open socket"));
+
   char host[164] = {0};
   PR_NetAddrToString(&mNetAddr, host, sizeof(host));
   LOG(("NetworkTest UDP client: Remote Host: %s", host));
-  LOG(("NetworkTest UDP client: AF: %d", mNetAddr.raw.family));
+
   int port = 0;
   if (mNetAddr.raw.family == AF_INET) {
     port = mNetAddr.inet.port;
@@ -235,7 +234,6 @@ UDP::Run()
     // See if we need to send something.
     PRIntervalTime now = PR_IntervalNow();
     if (mNextTimeToDoSomething && mNextTimeToDoSomething < now) {
-//      LOG(("NetworkTest UDP client: Iteration."));
       nsresult rv = NS_OK;
       switch (mPhase) {
         case START_TEST:
@@ -265,6 +263,11 @@ UDP::Run()
 
     if (mPhase == TEST_FINISHED) {
       LOG(("NetworkTest UDP client: Test finished."));
+      mFd = nullptr;
+      if (mLogFile) {
+        PR_Close(mLogFile);
+        mLogFile = nullptr;
+      }
       return NS_OK;
     }
 
@@ -284,7 +287,7 @@ UDP::Run()
     if (pollElem.out_flags & PR_POLL_READ) {
       PRNetAddr prAddr;
       int32_t count;
-      count = PR_RecvFrom(mFd, recvBuf, sizeof(recvBuf), 0, &prAddr,
+      count = PR_RecvFrom(mFd, mRecvBuf, sizeof(mRecvBuf), 0, &prAddr,
                           PR_INTERVAL_NO_WAIT);
 
       if (count < 0) {
@@ -295,12 +298,16 @@ UDP::Run()
         rv = ErrorAccordingToNSPRWithCode(code, "UDP");
         continue;
       }
-      rv = NewPkt(count, recvBuf);
+      rv = NewPkt(count, mRecvBuf);
     }
   }
 
   PR_Close(mFd);
   mFd = nullptr;
+  if (mLogFile) {
+    PR_Close(mLogFile);
+    mLogFile = nullptr;
+  }
   return rv;
 }
 
@@ -315,25 +322,25 @@ UDP::StartTestSend()
   }
 
   // Send a packet.
-  uint32_t id = htonl(mNextPktId);
-  memcpy(sendBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(sendBuf + tsStart, &now, tsLen);
-  memcpy(sendBuf + typeStart,
-         (mTestType == 1) ? UDP_reachability :
-         (mTestType == 5) ? UDP_performanceFromServerToClient :
-         UDP_performanceFromClientToServer, typeLen);
+  FormatStartPkt(PR_IntervalToMilliseconds(now));
 
-  if (mTestType == 5) {
-    uint32_t rate = htonl(mRate);
-    memcpy(sendBuf + rateStart, &rate, rateLen);
+  if (mTestType == 6) {
+    sprintf(mLogstr, "%lu START TEST 6\n",
+            (unsigned long)PR_IntervalToMilliseconds(now));
+    PR_Write(mLogFile, mLogstr, strlen(mLogstr));
   }
   int payloadsize = PAYLOADSIZE - (200 * mNumberOfRetrans);
   if (payloadsize < 512) {
     payloadsize = 512;
   }
-  int count = PR_SendTo(mFd, sendBuf, payloadsize, 0, &mNetAddr,
+  int count = PR_SendTo(mFd, mSendBuf, payloadsize, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
+
+  // Overwrite buffer. It would be enough to overwrite "Test_#nb" because if
+  // this is present receiver will think that the test is starting again.
+  PR_GetRandomNoise(&mSendBuf, sizeof(mSendBuf));
+
   if (count < 1) {
     PRErrorCode code = PR_GetError();
     if (code == PR_WOULD_BLOCK_ERROR) {
@@ -342,8 +349,7 @@ UDP::StartTestSend()
     return ErrorAccordingToNSPRWithCode(code, "UDP");
   }
 
-  LOG(("NetworkTest UDP client: Sending data for test %d"
-       " - sent %lu bytes.", mTestType,  count));
+  LOG(("NetworkTest UDP client: Sent a start packet for test %d.", mTestType));
   mNextTimeToDoSomething = now +
                            PR_MillisecondsToInterval(RETRANSMISSION_TIMEOUT);
   mNumberOfRetrans++;
@@ -354,7 +360,6 @@ UDP::StartTestSend()
 nsresult
 UDP::RunTestSend()
 {
-//  LOG(("NetworkTest UDP client: Run test."));
   PRIntervalTime now;
   switch (mTestType) {
     case 1:
@@ -362,28 +367,26 @@ UDP::RunTestSend()
       return NS_ERROR_UNEXPECTED;
     case 6:
       // Here we are sending data from the client to the server until we have
-      // sent maxBytes or maxTime expired. When test is finished we wait
+      // sent MAXBYTES or MAXTIME has expired. When test is finished we wait
       // SHUTDOWNTIMEOUT for outstanding acks to be received.
       {
-        //LOG(("NetworkTest UDP client: Sending packets test 6."));
         now = PR_IntervalNow();
         while (mNextTimeToDoSomething < now) {
-          PR_GetRandomNoise(&sendBuf, sizeof(sendBuf));
-          uint32_t id = htonl(mNextPktId);
-          memcpy(sendBuf + pktIdStart, &id, pktIdLen);
           now = PR_IntervalNow();
-          memcpy(sendBuf + tsStart, &now, tsLen);
-          if ((mSentBytes >= maxBytes) && mFirstPktSent &&
-              (PR_IntervalToSeconds(now - mFirstPktSent) >= maxTime)) {
-            LOG(("Test 6 finished: time %lu, first packet sent %lu, "
-                 "duration %lu, sent %llu max to send %llu", now, mFirstPktSent,
-                 PR_IntervalToSeconds(now - mFirstPktSent), mSentBytes,
-                 maxBytes));
+          FormatDataPkt(PR_IntervalToMilliseconds(now));
+
+          if ((mSentBytes >= MAXBYTES) && mFirstPktSent &&
+              (PR_IntervalToSeconds(now - mFirstPktSent) >= MAXTIME)) {
+            LOG(("Test 6 finished: current time %lu, first packet sent at %lu, "
+                 "duration %lu, sent %llu bytes, max bytes to be sent %llu",
+                 now, mFirstPktSent,
+                 PR_IntervalToMilliseconds(now - mFirstPktSent), mSentBytes,
+                 MAXBYTES));
             mLastPktId = mNextPktId;
-            memcpy(sendBuf + finishStart, FINISH, finishLen);
+            FormatFinishPkt();
             mPhase = FINISH_PACKET;
           }
-          int count = PR_SendTo(mFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
+          int count = PR_SendTo(mFd, mSendBuf, PAYLOADSIZE, 0, &mNetAddr,
                                 PR_INTERVAL_NO_WAIT);
           if (count < 0) {
             PRErrorCode code = PR_GetError();
@@ -393,35 +396,49 @@ UDP::RunTestSend()
             return ErrorAccordingToNSPRWithCode(code, "UDP");
           }
           mSentBytes += count;
+
+          if (mPhase != FINISH_PACKET) {
+            // Calculate time to do something.
+            mNextToSendInns += mPktInterval;
+            mNextTimeToDoSomething = mFirstPktSent +
+              PR_MicrosecondsToInterval(floor(mNextToSendInns / 1000.0));
+
+            // Log data.
+            sprintf(mLogstr, "%lu SEND %lu %lu\n",
+                    (unsigned long)PR_IntervalToMilliseconds(now),
+                    (unsigned long)mNextPktId,
+                    (unsigned long)PR_IntervalToMilliseconds(mNextTimeToDoSomething));
+
+          } else {
+            // Calculate time to do something.
+            mNextTimeToDoSomething = now +
+              PR_MillisecondsToInterval(RETRANSMISSION_TIMEOUT);
+
+            // Log data.
+            sprintf(mLogstr, "%lu FIN %lu expected to send: %lu\n",
+                    (unsigned long)PR_IntervalToMilliseconds(now),
+                    (unsigned long)mNextPktId,
+                    (unsigned long)PR_IntervalToMilliseconds(mNextTimeToDoSomething));
+          }
+          PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+
           mNextPktId++;
           if (!mFirstPktSent) {
             mFirstPktSent = now;
           }
-          if (mPhase == FINISH_PACKET) {
-            mNextTimeToDoSomething = now +
-              PR_MillisecondsToInterval(RETRANSMISSION_TIMEOUT);
-          } else {
-            mNextToSendInns += mPktInterval;
-            mNextTimeToDoSomething = mFirstPktSent +
-              PR_MicrosecondsToInterval(floor(mNextToSendInns / 1000.0));
-          }
-          now = PR_IntervalNow();
         }
       }
       break;
     default:
       return NS_ERROR_FAILURE;
   }
-//  LOG(("NetworkTest UDP client side: Test %d sent data: time %lu next time to"
-//       " do something %lu no packet timeout %lu.",
-//       mTestType, now, mNextTimeToDoSomething, mLastReceivedTimeout));
   return NS_OK;
 }
 
 nsresult
 UDP::SendFinishPacket()
 {
-  LOG(("NetworkTest UDP client: Sending finish packet retrans: %d.",
+  LOG(("NetworkTest UDP client: Sending finish packet retransmission %d.",
        mNumberOfRetransFinish));
   if (mNumberOfRetransFinish > MAX_RETRANSMISSIONS) {
     mError = true;
@@ -429,13 +446,11 @@ UDP::SendFinishPacket()
     return NS_OK;
   }
 
-  // Send a packet.
-  uint32_t id = htonl(mLastPktId);
-  memcpy(sendBuf + pktIdStart, &id, pktIdLen);
   PRIntervalTime now = PR_IntervalNow();
-  memcpy(sendBuf + tsStart, &now, tsLen);
-  memcpy(sendBuf + finishStart, FINISH, finishLen);
-  int count = PR_SendTo(mFd, sendBuf, PAYLOADSIZE, 0, &mNetAddr,
+
+  FormatDataPkt(PR_IntervalToMilliseconds(now));
+  FormatFinishPkt();
+  int count = PR_SendTo(mFd, mSendBuf, PAYLOADSIZE, 0, &mNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (count < 1) {
     PRErrorCode code = PR_GetError();
@@ -445,8 +460,13 @@ UDP::SendFinishPacket()
     return ErrorAccordingToNSPRWithCode(code, "UDP");
   }
   mSentBytes += count;
-  LOG(("NetworkTest UDP client: Sending data for test %d"
-       " - sent %lu bytes.", mTestType,  mSentBytes));
+
+  sprintf(mLogstr, "%lu FIN\n", (unsigned long)PR_IntervalToMilliseconds(now));
+  PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+
+  LOG(("NetworkTest UDP client: Sending finish packet for test %d"
+       " - sent %lu bytes - received %lu bytes.",
+       mTestType, mSentBytes, mRecvBytes));
   mNextTimeToDoSomething = now +
                            PR_MillisecondsToInterval(RETRANSMISSION_TIMEOUT);
   mNumberOfRetransFinish++;
@@ -456,7 +476,8 @@ UDP::SendFinishPacket()
 nsresult
 UDP::NoDataForTooLong()
 {
-  LOG(("NetworkTest UDP client: oData for too long."));
+  LOG(("NetworkTest UDP client: No data from the other side for too long - "
+       "finish test."));
   mError = true;
   mPhase = PHASE::TEST_FINISHED;
   return NS_OK;
@@ -486,23 +507,24 @@ UDP::SendAcks()
 nsresult
 UDP::NewPkt(int32_t aCount, char *aBuf)
 {
-  //LOG(("NetworkTest UDP client: Packet received."));
-  // We can receive a data packet(test 6) or an ack(test 5) or a start of a new
-  // test.
-  // if we have not received packet for a long time we can assume broken
-  // connection.
   PRIntervalTime lastReceived = PR_IntervalNow();
 
+  // if we have not received packet for a long time we can assume a broken
+  // connection.
+  mLastReceivedTimeout = lastReceived + mNodataTimeout;
+
+  // We can receive a data packet(test 5) or an ack(test 6 and test 1) or a
+  // packet describing the start of a new test.
   switch (mTestType) {
     case 1:
       LOG(("NetworkTest UDP client: Receiving data for test - UDP "
            "reachability  - received %u bytes.", aCount));
       if (mPhase == PHASE::START_TEST) {
         uint32_t id;
-        memcpy(&id, aBuf + pktIdStart, pktIdLen);
-        if (mNextPktId != ntohl(id)) {
-          LOG(("NetworkTest UDP client: recv %d should be %d", mNextPktId,
-               ntohl(id)));
+        memcpy(&id, aBuf + PKT_ID_START, PKT_ID_LEN);
+        if (mNextPktId != id) {
+          LOG(("NetworkTest UDP client: packet with id %lu has been received, "
+               "but it should have bin id %lu", mNextPktId, id));
           return NS_OK;
         }
         mPhase = PHASE::WAIT_FINISH_TIMEOUT;
@@ -512,9 +534,6 @@ UDP::NewPkt(int32_t aCount, char *aBuf)
       break;
     case 5:
       mRecvBytes +=aCount;
-//      LOG(("NetworkTest UDP client: Receivinging data for test - send"
-//           " data from server to client with UDP  - received %lu bytes.",
-//           mRecvBytes));
 
       if (mPhase == PHASE::START_TEST) {
         mPhase = PHASE::RUN_TEST;
@@ -526,7 +545,7 @@ UDP::NewPkt(int32_t aCount, char *aBuf)
       mAcksToSend.push_back(Ack(aBuf, lastReceived));
 
       if (mPhase == PHASE::RUN_TEST) {
-        if (memcmp(aBuf + finishStart, FINISH, finishLen) == 0) {
+        if (memcmp(aBuf + FINISH_START, FINISH, FINISH_LEN) == 0) {
           mPhase = WAIT_FINISH_TIMEOUT;
           mNextTimeToDoSomething = lastReceived +
                                    PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
@@ -536,55 +555,147 @@ UDP::NewPkt(int32_t aCount, char *aBuf)
               (double)PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived)
               * 1000.0;
           }
-          LOG(("Test 5 finished: time %lu, first packet sent %lu, "
-               "duration %lu, received %llu",
+          LOG(("Test 5 finished: current time %lu, first packet sent %lu, "
+               "duration %lu, received %llu, observed rate: %lf",
                PR_IntervalNow(),
                mFirstPktReceived,
                PR_IntervalToMilliseconds(PR_IntervalNow() - mFirstPktReceived),
-               mRecvBytes));
+               mRecvBytes,
+               mRateObserved));
         }
       }
-      mLastReceivedTimeout = lastReceived + mNodataTimeout;
       break;
     case 6:
-      // Recv an ack. TODO add data collecting.
-      mRecvBytes +=aCount;
-//      LOG(("NetworkTest UDP client: Receiving data for test - send data from"
-//           " server to client with UDP  - received ACK received %lu bytes.",
-///           mRecvBytes));
-      if (mPhase == PHASE::START_TEST) {
-        mPhase = PHASE::RUN_TEST;
-      }
-      if (mPhase == PHASE::FINISH_PACKET) {
-        uint32_t id;
-        memcpy(&id, aBuf + pktIdStart, pktIdLen);
-        if (mLastPktId == ntohl(id)) {
-          mPhase = WAIT_FINISH_TIMEOUT;
-          uint32_t rate;
-          memcpy(&rate, aBuf + rateStart, rateLen);
-          mRateObserved = ntohl(rate);
-          mNextTimeToDoSomething = lastReceived +
-                                   PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
+      {
+        // Receiving an ack.
+        mRecvBytes +=aCount;
+
+        uint32_t pktId = ReadACKPktAndLog(aBuf,
+          PR_IntervalToMilliseconds(lastReceived));
+
+        if (mPhase == PHASE::START_TEST) {
+          mPhase = PHASE::RUN_TEST;
+        }
+        if (mPhase == PHASE::FINISH_PACKET) {
+          if (mLastPktId == pktId) {
+            mPhase = WAIT_FINISH_TIMEOUT;
+            uint64_t rate;
+            memcpy(&rate, aBuf + RATE_RECEIVING_PKT_START,
+                   RATE_RECEIVING_PKT_LEN);
+            mRateObserved = ntohll(rate);
+            mNextTimeToDoSomething = lastReceived +
+                                     PR_MillisecondsToInterval(SHUTDOWNTIMEOUT);
+          }
         }
       }
-      mLastReceivedTimeout =  lastReceived + mNodataTimeout;
-     break;
+      break;
 
     default:
       return NS_ERROR_UNEXPECTED;
   }
-//  LOG(("NetworkTest UDP client side: Test %d: time %lu next time to do "
-//       "something %lu no packet timeout %lu.",
-//       mTestType, lastReceived, mNextTimeToDoSomething, mLastReceivedTimeout));
   return NS_OK;
 }
 
 nsresult
 UDP::WaitForFinishTimeout()
 {
+  LOG(("NetworkTest UDP client: WaitForFinishTimeout "));
   mError = false;
   mPhase = TEST_FINISHED;
   return NS_OK;
+}
+
+void
+UDP::FormatStartPkt(uint32_t aTS)
+{
+  memcpy(mSendBuf + PKT_ID_START, &mNextPktId, PKT_ID_LEN);
+  memcpy(mSendBuf + TIMESTAMP_START, &aTS, TIMESTAMP_LEN);
+  memcpy(mSendBuf + TYPE_START,
+         (mTestType == 1) ? UDP_reachability :
+         (mTestType == 5) ? UDP_performanceFromServerToClient :
+         UDP_performanceFromClientToServer, TYPE_LEN);
+
+  if (mTestType == 5) {
+    uint64_t rate = htonll(mRate);
+    memcpy(mSendBuf + RATE_TO_SEND_START, &rate, RATE_TO_SEND_LEN);
+    memcpy(mSendBuf + FILE_NAME_START, mLogFileName.get(), FILE_NAME_LEN);
+  }
+}
+
+void
+UDP::FormatDataPkt(uint32_t aTS)
+{
+  // We do not do htonl for pkt id and timestamp because these values will be
+  // only read by this host. They are stored in a packet, sent to the receiver,
+  // the receiver copies them into an ACK pkt and sends them back to the sender
+  // that copies them back into uint32_t variables.
+
+  // Add pkt ID.
+  memcpy(mSendBuf + PKT_ID_START, &mNextPktId, PKT_ID_LEN);
+
+  // Add timestamp.
+  memcpy(mSendBuf + TIMESTAMP_START, &aTS, TIMESTAMP_LEN);
+}
+
+void
+UDP::FormatFinishPkt()
+{
+  memcpy(mSendBuf + FINISH_START, FINISH, FINISH_LEN);
+}
+
+uint32_t
+UDP::ReadACKPktAndLog(char *aBuf, uint32_t aTS)
+{
+  // We do not do htonl for pkt id and timestamp because these values will be
+  // only read by this host. They are stored in a packet, sent to the receiver,
+  // the receiver copies them into an ACK pkt and sends them back to the sender
+  // that copies them back into uint32_t variables.
+
+  // Get packet Id.
+  uint32_t pktId;
+  memcpy(&pktId, aBuf + PKT_ID_START, PKT_ID_LEN);
+
+  // Get timestamp.
+  uint32_t ts;
+  memcpy(&ts, aBuf + TIMESTAMP_START, TIMESTAMP_LEN);
+
+  // Get the time the pkt was received at the receiver and the time the ACK
+  // was sent.
+  // The delay at the receiver can be calculated from these values.
+  uint32_t usecReceived;
+  memcpy(&usecReceived, aBuf + TIMESTAMP_RECEIVED_START,
+         TIMESTAMP_RECEIVED_LEN);
+  uint32_t usecACKSent;
+  memcpy(&usecACKSent, aBuf + TIMESTAMP_ACK_SENT_START, TIMESTAMP_ACK_SENT_LEN);
+
+  sprintf(mLogstr, "%lu ACK %lu %lu %lu %lu\n",
+          (unsigned long)aTS,
+          (unsigned long)pktId,
+          (unsigned long)ts,
+          (unsigned long)ntohl(usecReceived),
+          (unsigned long)ntohl(usecACKSent));
+  PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+  return pktId;
+}
+
+void
+UDP::LogLogFormat()
+{
+  char line1[] = "Data pkt has been sent: [timestamp pkt sent] SEND [pkt id] [pkt are sent in \n"
+                 "                        equal intervals log time when it should have been\n"
+                 "                        sent(this is for the analysis whether the gap between\n"
+                 "                        the time it should have been sent and the time it was\n"
+                 "                        sent is too large)]\n";
+  PR_Write(mLogFile, line1, strlen(line1));
+
+  char line2[] = "The last packet has the same format as data packet\n";
+  PR_Write(mLogFile, line2, strlen(line2));
+
+  char line3[] = "An ACK has been received: [timestamp ack was received] ACK [pkt id]\n"
+                 "                          [timestamp data pkt was sent by the sender (this\n"
+                 "                          host)] [time when data packet was received by the\n"
+                 "                          receiver] [time when ack was sent by the receiver]\n";
+  PR_Write(mLogFile, line3, strlen(line3));
 }
 
 } // namespace NetworkPath

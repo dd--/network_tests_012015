@@ -9,6 +9,7 @@
 
 #include "nsError.h"
 #include "prerror.h"
+#include "nsString.h"
 
 namespace NetworkPath {
 
@@ -17,5 +18,6 @@ nsresult ErrorAccordingToNSPRWithCode(PRErrorCode errCode, const char *aType);
 
 int LogErrorWithCode(PRErrorCode errCode, const char *aType);
 int LogError(const char *aType);
+PRFileDesc* OpenTmpFileForDataCollection(nsCString aFileName);
 } // namespace NetworkPath
 #endif

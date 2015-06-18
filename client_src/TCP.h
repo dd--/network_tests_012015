@@ -14,16 +14,22 @@ class TCP
 public:
   TCP(PRNetAddr *aAddr);
   ~TCP();
-  nsresult Start(int aTestType);
+  nsresult Start(int aTestType, nsCString aFileName);
   uint64_t GetRate() { return mPktPerSec; }
 private:
   nsresult Init();
   nsresult Run();
+  void LogLogFormat();
 
   PRNetAddr mNetAddr;
   PRFileDesc *mFd;
   int mTestType;
   uint64_t mPktPerSec;
+  PRFileDesc *mLogFile;
+  // File name [16 random]_test[test number]_itr[iteration number]
+  //char mFileName[FILE_NAME_LEN];
+  nsCString mLogFileName;
+  char mLogstr[80];
 };
 } // namespace NetworkPath
 #endif

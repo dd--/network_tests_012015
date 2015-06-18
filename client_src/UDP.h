@@ -9,7 +9,9 @@
 
 #include "Ack.h"
 #include "prnetdb.h"
+#include "config.h"
 #include <vector>
+#include <string>
 
 namespace NetworkPath {
 class UDP
@@ -17,10 +19,12 @@ class UDP
 public:
   UDP(PRNetAddr *aAddr);
   ~UDP();
-  nsresult Start(int aTestType, uint32_t aRate, bool &aSucceeded);
-  uint32_t GetRate() { return mRateObserved; }
+  nsresult Start(int aTestType, uint64_t aRate, nsCString aFileName,
+                 bool &aSucceeded);
+  uint64_t GetRate() { return mRateObserved; }
 private:
   nsresult Init();
+  nsresult OpenFile();
   nsresult Run();
   nsresult StartTestSend();
   nsresult RunTestSend();
@@ -29,14 +33,19 @@ private:
   nsresult NoDataForTooLong();
   nsresult NewPkt(int32_t aCount, char *aBuf);
   nsresult SendAcks();
+  void FormatStartPkt(uint32_t aTS);
+  void FormatDataPkt(uint32_t aTS);
+  void FormatFinishPkt();
+  uint32_t ReadACKPktAndLog(char *aBuf, uint32_t aTS);
+  void LogLogFormat();
 
 private:
   PRFileDesc *mFd;
   PRNetAddr mNetAddr;
-  char sendBuf[1500];
-  char recvBuf[1500];
-  uint32_t mRate;
-  uint32_t mRateObserved;
+  char mSendBuf[PAYLOADSIZE];
+  char mRecvBuf[PAYLOADSIZE];
+  uint64_t mRate;
+  uint64_t mRateObserved;
   int mTestType;
   PRIntervalTime mLastReceivedTimeout;
   PRIntervalTime mNextTimeToDoSomething;
@@ -56,6 +65,11 @@ private:
   PRIntervalTime mNodataTimeout;
   bool mError;
 
+  PRFileDesc *mLogFile;
+  // File name [16 random]_test[test number]_itr[iteration number]
+  //char mFileName[FILE_NAME_LEN];
+  nsCString mLogFileName;
+
   enum PHASE {
     START_TEST,
     RUN_TEST,
@@ -65,6 +79,8 @@ private:
   };
 
   enum PHASE mPhase;
+
+  char mLogstr[80];
 };
 } // namespace NetworkPath
 #endif

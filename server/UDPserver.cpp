@@ -18,8 +18,6 @@ extern PRLogModuleInfo* gServerTestLog;
 #define NS_SOCKET_CONNECT_TIMEOUT PR_MillisecondsToInterval(20)
 #define SERVERSNDBUFFERSIZE 12582912
 
-extern uint64_t maxBytes;
-
 static void PR_CALLBACK
 UDPSocketThread(void *_port)
 {
@@ -76,7 +74,7 @@ UDPSocketThread(void *_port)
   PRPollDesc pollElem;
   pollElem.fd = fd;
   pollElem.in_flags = PR_POLL_READ | PR_POLL_EXCEPT;
-  char buf[1500];
+  char buf[PAYLOADSIZE];
 
   int rv = 0;
   while (!rv) {
@@ -115,7 +113,7 @@ UDPSocketThread(void *_port)
     if (pollElem.out_flags & PR_POLL_READ) {
       PRNetAddr prAddr;
       int32_t count;
-      count = PR_RecvFrom(fd, buf, sizeof(buf), 0, &prAddr,
+      count = PR_RecvFrom(fd, buf, PAYLOADSIZE, 0, &prAddr,
                           PR_INTERVAL_NO_WAIT);
 
       if (count < 0) {
@@ -126,6 +124,7 @@ UDPSocketThread(void *_port)
         rv = LogErrorWithCode(code, "UDP");
         continue;
       }
+
       std::vector<ClientSocket*>::iterator it = clients.begin();
       while (it != clients.end() && !(*it)->IsThisSocket(&prAddr)) {
         it++;

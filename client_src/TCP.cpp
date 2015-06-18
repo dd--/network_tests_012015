@@ -13,18 +13,12 @@ namespace NetworkPath {
 extern PRLogModuleInfo* gClientTestLog;
 #define LOG(args) PR_LOG(gClientTestLog, PR_LOG_DEBUG, args)
 
-// I will give test a code:
-#define TCP_reachability "Test_2"
-#define TCP_performanceFromServerToClient "Test_3"
-#define TCP_performanceFromClientToServer "Test_4"
-#define FINISH "Finish"
-
 // after this short interval, we will return to PR_Poll
 #define NS_SOCKET_CONNECT_TIMEOUT PR_MillisecondsToInterval(400)
 #define SNDBUFFERSIZE 12582912
 
-extern uint64_t maxBytes;
-extern uint32_t maxTime;
+#define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+#define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
 TCP::TCP(PRNetAddr *aNetAddr)
   : mFd(nullptr)
@@ -40,7 +34,7 @@ TCP::~TCP()
 }
 
 nsresult
-TCP::Start(int aTestType)
+TCP::Start(int aTestType, nsCString aFileName)
 {
   mTestType = aTestType;
   nsresult rv = Init();
@@ -50,6 +44,21 @@ TCP::Start(int aTestType)
       mFd = nullptr;
     }
     return rv;
+  }
+
+  if (aTestType == 3) {
+    mLogFileName = aFileName;
+    //  We collect data on the receiver side
+    mLogFile = OpenTmpFileForDataCollection(mLogFileName);
+    if (!mLogFile) {
+      if (mFd) {
+        PR_Close(mFd);
+        mFd = nullptr;
+      }
+    }
+    LogLogFormat();
+  } else if (aTestType == 4) {
+    mLogFileName = aFileName;
   }
 
   rv = Run();
@@ -165,7 +174,7 @@ TCP::Run()
   uint64_t recvBytesForRate = 0;
   PRIntervalTime timeFirstPktReceived = 0;
   PRIntervalTime startRateCalc = 0;
-  uint16_t bufLen = 1500;
+  uint16_t bufLen = PAYLOADSIZE;
   char buf[bufLen];
   PR_GetRandomNoise(&buf, sizeof(buf));
   switch (mTestType) {
@@ -177,6 +186,7 @@ TCP::Run()
       break;
     case 4:
       memcpy(buf, TCP_performanceFromClientToServer, 6);
+      memcpy(buf + FILE_NAME_START, mLogFileName.get(), FILE_NAME_LEN);
       break;
     default:
       PR_Close(mFd);
@@ -217,9 +227,16 @@ TCP::Run()
       int written = 0;
       if (writtenBytes < bufLen) {
         // The first packet must be sent as it is so that server can read
-        // exact positions in buffer. Actually only first bytes are important.
+        // exact positions in the buffer. Actually only the first bytes are
+        // important, but we are sending it complete.
         written = PR_Write(mFd, buf + writtenBytes,
                            bufLen - writtenBytes);
+        if (mTestType == 3) {
+          sprintf(mLogstr, "%lu START TEST 3 %lu\n",
+                  (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                  (unsigned long)written);
+          PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+        }
       } else {
         written = PR_Write(mFd, buf, bufLen);
       }
@@ -263,8 +280,6 @@ TCP::Run()
         return ErrorAccordingToNSPR("TCP");
       }
       readBytes += read;
-//      LOG(("NetworkTest TCP client: time %lu Test %d - received %lu bytes.",
-//           PR_IntervalNow() - timeFirstPktReceived, mTestType, readBytes));
 
       if (!timeFirstPktReceived) {
         timeFirstPktReceived = PR_IntervalNow();
@@ -279,6 +294,12 @@ TCP::Run()
             return NS_OK;
           }
         case 3:
+          // Log data.
+          sprintf(mLogstr, "%lu RECV %lu\n",
+                  (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                  (unsigned long)read);
+          PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+
           if (PR_IntervalToSeconds(PR_IntervalNow() - timeFirstPktReceived) >=
               2) {
             recvBytesForRate += read;
@@ -288,16 +309,16 @@ TCP::Run()
           }
 
           // Check whether we have received enough data.
-          if ((readBytes >= maxBytes) &&
+          if ((readBytes >= MAXBYTES) &&
               (PR_IntervalToSeconds(PR_IntervalNow() - timeFirstPktReceived)
-               >= maxTime)) {
+               >= MAXTIME)) {
 
             if (PR_IntervalToSeconds(PR_IntervalNow() - startRateCalc)) {
-              mPktPerSec = (double)recvBytesForRate / 1500.0 /
+              mPktPerSec = (double)recvBytesForRate / PAYLOADSIZEF /
                 (double)PR_IntervalToMilliseconds(PR_IntervalNow() - startRateCalc) *
                 1000.0;
             }
-            LOG(("NetworkTest TCP client: Closing, observed rate: %lu",
+            LOG(("NetworkTest TCP client: Closing, observed rate: %llu",
                  mPktPerSec));
             LOG(("Test 3 finished: time %lu, first packet sent %lu, "
                  "duration %lu, received %llu max to received %llu, received "
@@ -305,7 +326,7 @@ TCP::Run()
                  PR_IntervalNow(),
                  timeFirstPktReceived,
                  PR_IntervalToMilliseconds(PR_IntervalNow() - timeFirstPktReceived),
-                 readBytes, maxBytes, recvBytesForRate,
+                 readBytes, MAXBYTES, recvBytesForRate,
                  PR_IntervalNow() - startRateCalc));
             PR_Close(mFd);
             mFd = nullptr;
@@ -318,8 +339,8 @@ TCP::Run()
                  readBytes));
             uint64_t rate;
             PR_STATIC_ASSERT(sizeof(rate) == 8);
-            memcpy(&rate, buf, sizeof (rate));
-            mPktPerSec = ntohl(rate);
+            memcpy(&rate, buf, sizeof(rate));
+            mPktPerSec = ntohll(rate);
             PR_Close(mFd);
             mFd = nullptr;
             return NS_OK;
@@ -332,4 +353,13 @@ TCP::Run()
   return NS_OK;
 }
 
+void
+TCP::LogLogFormat()
+{
+  char line1[] = "Data pkt has been recevied: [timestamp pkt received] RECV [bytes received]\n";
+  PR_Write(mLogFile, line1, strlen(line1));
+
+  char line2[] = "The last packet has been sent: [timestamp pkt sent] RECV [bytes sent]\n";
+  PR_Write(mLogFile, line2, strlen(line2));
+}
 } // namespace NetworkPath

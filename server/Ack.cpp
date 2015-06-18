@@ -6,9 +6,13 @@
 
 #include "Ack.h"
 #include "HelpFunctions.h"
+#include "config.h"
 #include <cstring>
 
-Ack::Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint32_t aRate)
+#define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+#define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
+
+Ack::Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint64_t aRate)
 {
   if (aLargeAck) {
     if (aLargeAck < 512) {
@@ -16,15 +20,20 @@ Ack::Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint32_t aRate)
     }
     mBufLen = aLargeAck;
   } else if (aRate) {
-    mBufLen = pktIdLen + tsLen + delayLen + rateLen;
+    mBufLen = PKT_ID_LEN + TIMESTAMP_LEN + TIMESTAMP_RECEIVED_LEN +
+              TIMESTAMP_ACK_SENT_LEN + RATE_RECEIVING_PKT_LEN;
   } else {
-    mBufLen = pktIdLen + tsLen + delayLen;
+    mBufLen = PKT_ID_LEN + TIMESTAMP_LEN + TIMESTAMP_RECEIVED_LEN +
+              TIMESTAMP_ACK_SENT_LEN;
   }
   mBuf = new char[mBufLen];
   memcpy(mBuf, aBuf, mBufLen);
-  uint32_t rate = htonl(aRate);
-  memcpy(mBuf + rateStart, &rate, rateLen);
-  mRecvTime = aRecv;
+  if (aRate) {
+    uint64_t rate = htonll(aRate);
+    memcpy(mBuf + RATE_RECEIVING_PKT_START, &rate, RATE_RECEIVING_PKT_LEN);
+  }
+  uint32_t usec = htonl(PR_IntervalToMilliseconds(aRecv));
+  memcpy(mBuf + TIMESTAMP_RECEIVED_START, &usec, TIMESTAMP_RECEIVED_LEN);
 }
 
 Ack::~Ack()
@@ -37,7 +46,6 @@ Ack::Ack(const Ack &other)
   mBufLen = other.mBufLen;
   mBuf = new char[mBufLen];
   memcpy(mBuf, other.mBuf, mBufLen);
-  mRecvTime = other.mRecvTime;
 }
 
 Ack&
@@ -48,7 +56,6 @@ Ack::operator= (const Ack &other)
     delete []mBuf;
     mBuf = new char[mBufLen];
     memcpy(mBuf, other.mBuf, mBufLen);
-    mRecvTime = other.mRecvTime;
   }
   return *this;
 }
@@ -56,8 +63,8 @@ Ack::operator= (const Ack &other)
 int
 Ack::SendPkt(PRFileDesc *aFd, PRNetAddr *aNetAddr)
 {
-  uint32_t sec = htonl(PR_IntervalToMilliseconds(PR_IntervalNow() - mRecvTime));
-  memcpy(mBuf + delayStart, &sec, delayLen);
+  uint32_t usec = htonl(PR_IntervalToMilliseconds(PR_IntervalNow()));
+  memcpy(mBuf + TIMESTAMP_ACK_SENT_START, &usec, TIMESTAMP_ACK_SENT_LEN);
   int write = PR_SendTo(aFd, mBuf, mBufLen, 0, aNetAddr,
                         PR_INTERVAL_NO_WAIT);
   if (write < 1) {

@@ -24,7 +24,7 @@ extern int rateLen;
 class Ack
 {
 public:
-  Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint32_t aRate);
+  Ack(char *aBuf, PRIntervalTime aRecv, int aLargeAck, uint64_t aRate);
   ~Ack();
   Ack(const Ack &other);
   Ack& operator= (const Ack &other);
@@ -34,7 +34,6 @@ private:
   // Ack pkt structure: 32 bit packet id, copied timestamp, time between
   // receiving a packet and sending the ack in milliseconds.
   char *mBuf;
-  PRIntervalTime mRecvTime;
   int mBufLen;
 };
 

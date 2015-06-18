@@ -12,6 +12,7 @@
 #include "nsString.h"
 #include "nsAutoPtr.h"
 #include "nsIThread.h"
+#include "nsIUUIDGenerator.h"
 
 namespace NetworkPath {
 
@@ -47,6 +48,7 @@ private:
   bool mUDPReachabilityResults[kNumberOfPorts];
   nsCOMPtr<NetworkTestListener> mCallback;
   nsCOMPtr<nsIThread> mThread;
+  nsCOMPtr<nsIUUIDGenerator> mUUIDGenerator;
 };
 
 } // namespace NetworkPath

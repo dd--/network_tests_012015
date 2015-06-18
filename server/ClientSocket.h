@@ -8,6 +8,7 @@
 #define CLIENTSOCKET_H__
 
 #include "Ack.h"
+#include "config.h"
 #include "prnetdb.h"
 #include <vector>
 
@@ -15,6 +16,7 @@ class ClientSocket
 {
 public:
   ClientSocket(PRNetAddr *aAddr);
+  ~ClientSocket();
   int MaybeSendSomethingOrCheckFinish(PRFileDesc *aFd,
                                       bool &aClientFinished);
   int SendAcks(PRFileDesc *aFd);
@@ -26,10 +28,18 @@ public:
   int SendFinishPacket(PRFileDesc *aFd);
 
 private:
+  void FormatStartPkt(uint32_t aTS);
+  void FormatDataPkt(uint32_t aTS);
+  void FormatFinishPkt();
+  uint32_t ReadACKPktAndLog(char *aBuf, uint32_t aTS);
+  void LogLogFormat();
+  int FirstPacket(int32_t aCount, char *aBuf, PRIntervalTime received);
+
+private:
   PRNetAddr mNetAddr;
   int mTestType;
-  char sendBuf[1500];
-  char recvBuf[1500];
+  char mSendBuf[PAYLOADSIZE];
+  char mRecvBuf[PAYLOADSIZE];
   int mReplySize;
   PRIntervalTime mFirstPktSent;
   PRIntervalTime mFirstPktReceived;
@@ -38,18 +48,22 @@ private:
   uint64_t mRecvBytes;
   std::vector<Ack> mAcksToSend;
   int mNumberOfRetransFinish;
-  uint32_t mPktPerSec;
+  uint64_t mPktPerSec;
   double mPktInterval;
   double mNextToSendInns;
   char mPktIdFirstPkt[4];
-  uint32_t mPktPerSecObserved;
+  uint64_t mPktPerSecObserved;
   uint32_t mNextPktId;
   uint32_t mLastPktId;
   PRIntervalTime mNodataTimeout;
   PRIntervalTime mLastReceivedTimeout;
   bool mError;
 
+  PRFileDesc *mLogFile;
+  char mLogFileName[FILE_NAME_LEN];
+
   enum PHASE {
+    START_TEST,
     RUN_TEST,
     FINISH_PACKET,
     WAIT_FINISH_TIMEOUT,
@@ -57,6 +71,7 @@ private:
   };
 
   enum PHASE mPhase;
+  char mLogstr[80];
 };
 
 #endif

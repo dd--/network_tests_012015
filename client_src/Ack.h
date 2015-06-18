@@ -11,17 +11,6 @@
 
 namespace NetworkPath {
 
-extern int pktIdStart;
-extern int tsStart; //timestamp
-extern int typeStart; //type.
-extern int delayStart; //delay.
-extern int rateStart; //observed rate 
-extern int pktIdLen;
-extern int tsLen; //timestamp
-extern int typeLen; //type
-extern int delayLen; //delay
-extern int rateLen;
-
 class Ack
 {
 public:
@@ -35,7 +24,6 @@ private:
   // Ack pkt structure:  4+4+4byte packet id, copied timestamp, time between
   // receiving a packet and sending the ack in milliseconds.
   char *mBuf;
-  PRIntervalTime mRecvTime;
   int mBufLen;
 };
 } // namespace NetworkPath

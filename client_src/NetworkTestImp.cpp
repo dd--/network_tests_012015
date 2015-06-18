@@ -10,6 +10,9 @@
 #include "mozilla/Module.h"
 #include "prlog.h"
 #include "nsThreadUtils.h"
+#include "nsServiceManagerUtils.h"
+#include "nsPrintfCString.h"
+#include <string>
 
 namespace NetworkPath {
 
@@ -80,13 +83,18 @@ NetworkTestImp::AllTests()
       }
     }
     if (portInx != -1) {
+      nsresult rv;
+      mUUIDGenerator = do_GetService("@mozilla.org/uuid-generator;1", &rv);
+      if (NS_FAILED(rv)) {
+        goto done;
+      }
       UdpVsTcpPerformanceFromServerToClient(&addr, mPorts[portInx]);
       UdpVsTcpPerformanceFromClientToServer(&addr, mPorts[portInx]);
     }
   }
 
   complete = true;
-  
+
 done:
   LOG(("NetworkTest client side: Tests finished %s.", complete ? "ok" : "failed"));
   NS_DispatchToMainThread(NS_NewRunnableMethod(this, &NetworkTestImp::TestsFinished));
@@ -165,7 +173,7 @@ NetworkTestImp::UdpReachability(PRNetAddr *aNetAddr)
     UDP udp(aNetAddr);
     bool testSuccess = false;
     // This is test number 1.
-    rv = udp.Start(1, 0, testSuccess);
+    rv = udp.Start(1, 0, EmptyCString(), testSuccess);
     if (NS_FAILED(rv) || !testSuccess) {
       LOG(("NetworkTest: Testing udp reachability on port %d - failed.",
            mPorts[inx]));
@@ -188,7 +196,7 @@ NetworkTestImp::TcpReachability(PRNetAddr *aNetAddr)
     AddPort(aNetAddr, mPorts[inx]);
     TCP tcp(aNetAddr);
     // This is test 2.
-    rv = tcp.Start(2);
+    rv = tcp.Start(2, EmptyCString());
     if (NS_FAILED(rv)) {
       LOG(("NetworkTest: Testing tcp reachability on port %d - failed.",
            mPorts[inx]));
@@ -212,16 +220,32 @@ NetworkTestImp::UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
   TCP tcp(aNetAddr);
   bool testSuccess = false;
   nsresult rv;
-  for (int iter = 0; iter < 10; iter++) {
-    rv = tcp.Start(3);
+
+  nsID id;
+  rv = mUUIDGenerator->GenerateUUIDInPlace(&id);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  char idString[NSID_LENGTH];
+  id.ToProvidedString(idString);
+  idString[NSID_LENGTH-2] = '\0';
+
+  for (int iter = 0; iter < 2; iter++) {
+    rv = tcp.Start(3,
+                   nsPrintfCString("%s_test3_itr%d", idString + 1, iter));
     LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
          "client on port %d iteration %d - achieved tcp rate: %llu",
          aRemotePort, iter, tcp.GetRate()));
     if (NS_FAILED(rv)) {
       return rv;
     }
+
     UDP udp(aNetAddr);
-    rv = udp.Start(5, tcp.GetRate(), testSuccess);
+    rv = udp.Start(5,
+                   tcp.GetRate(),
+                   nsPrintfCString("%s_test5_itr%d", idString + 1, iter),
+                   testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
       return rv;
     }
@@ -243,17 +267,35 @@ NetworkTestImp::UdpVsTcpPerformanceFromClientToServer(PRNetAddr *aNetAddr,
   TCP tcp(aNetAddr);
   bool testSuccess = false;
   nsresult rv;
-  for (int iter = 0; iter < 10; iter++) {
-    rv = tcp.Start(4);
+
+  nsID id;
+  rv = mUUIDGenerator->GenerateUUIDInPlace(&id);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  char idString[NSID_LENGTH];
+  id.ToProvidedString(idString);
+  idString[NSID_LENGTH-2] = '\0';
+
+  for (int iter = 0; iter < 2; iter++) {
+    rv = tcp.Start(4,
+                   nsPrintfCString("%s_test4_itr%d", idString + 1, iter));
     LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
          "server on port %d iteration %d - achieved tcp rate: %llu",
          aRemotePort, iter, tcp.GetRate()));
     if (NS_FAILED(rv)) {
       return rv;
     }
+
     UDP udp(aNetAddr);
-    rv = udp.Start(6, tcp.GetRate(), testSuccess);
+    rv = udp.Start(6,
+                   tcp.GetRate(),
+                   nsPrintfCString("%s_test6_itr%d", idString + 1, iter),
+                   testSuccess);
     if (NS_FAILED(rv) && !testSuccess) {
+      LOG(("NetworkTest: UdpVsTcpPerformanceFromClientToServer error: %d %d",
+           rv, testSuccess));
       return rv;
     }
     LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "

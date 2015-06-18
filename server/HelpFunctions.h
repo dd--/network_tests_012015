@@ -8,8 +8,10 @@
 #define HELPFUNCTIONS_H__
 
 #include "prerror.h"
+#include "prio.h"
 
 int LogErrorWithCode(PRErrorCode errCode, const char *aType);
 int LogError(const char *aType);
+PRFileDesc* OpenTmpFileForDataCollection(char *aFileName);
 
 #endif

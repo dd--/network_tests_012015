@@ -12,7 +12,9 @@
 #include "prthread.h"
 #include "prmem.h"
 #include "prrng.h"
+#include "config.h"
 #include <cstring>
+#include <stdio.h>
 
 extern PRLogModuleInfo* gServerTestLog;
 #define LOG(args) PR_LOG(gServerTestLog, PR_LOG_DEBUG, args)
@@ -20,14 +22,18 @@ extern PRLogModuleInfo* gServerTestLog;
 #define NS_SOCKET_CONNECT_TIMEOUT PR_MillisecondsToInterval(20)
 #define SERVERSNDBUFFERSIZE 12582912
 
-// I will give test a code:
-#define TCP_reachability "Test_2"
-#define TCP_performanceFromServerToClient "Test_3"
-#define TCP_performanceFromClientToServer "Test_4"
-#define FINAL "Final"
+#define htonll(x) ((1==htonl(1)) ? (x) : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+#define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
-extern uint64_t maxTime;
-extern uint64_t maxBytes;
+void
+LogLogFormat(PRFileDesc * aFile)
+{
+  char line1[] = "Data pkt has been recevied: [timestamp pkt received] RECV [bytes received]\n";
+  PR_Write(aFile, line1, strlen(line1));
+
+  char line2[] = "The last packet has been sent: [timestamp pkt sent] RECV [bytes sent]\n";
+  PR_Write(aFile, line2, strlen(line2));
+}
 
 static void PR_CALLBACK
 ClientThread(void *_fd)
@@ -42,12 +48,14 @@ ClientThread(void *_fd)
   int testType = 0;
   uint64_t readBytes = 0;
   uint64_t recvBytesForRate = 0;
-  uint32_t  bufLen = 1500;
+  uint32_t  bufLen = PAYLOADSIZE;
   char buf[bufLen];
   PR_GetRandomNoise(&buf, sizeof(buf));
   PRIntervalTime timeFirstPktReceived = 0;
   PRIntervalTime startRateCalc = 0;
   uint64_t pktPerSec = 0;
+  PRFileDesc *logFile;
+  char logstr[80];
 
   while (1) {
     pollElem.out_flags = 0;
@@ -56,21 +64,18 @@ ClientThread(void *_fd)
       LogError("TCP");
       LOG(("NetworkTest TCP server side: Poll error [fd=%p]. Sent %lu bytes, "
            "received %lu bytes", fd, writtenBytes, readBytes));
-      PR_Close(fd);
-      return;
+      break;
     } else  if (rv == 0) {
       LOG(("NetworkTest TCP server side: Poll timeout [fd=%p]. Sent %lu bytes, "
            "received %lu bytes", fd, writtenBytes, readBytes));
-      PR_Close(fd);
-      return;
+      break;
     }
     if (pollElem.out_flags & (PR_POLL_ERR | PR_POLL_HUP | PR_POLL_NVAL)) {
       PRErrorCode errCode = PR_GetError();
       LogErrorWithCode(errCode, "TCP");
       LOG(("NetworkTest TCP server side: Connection error [fd=%p]. Sent %lu "
            "bytes, received %lu bytes", fd, writtenBytes, readBytes));
-      PR_Close(fd);
-      return;
+      break;
     }
 
     if (pollElem.out_flags & PR_POLL_READ) {
@@ -88,8 +93,7 @@ ClientThread(void *_fd)
           continue;
         }
         LogErrorWithCode(errCode, "TCP");
-        PR_Close(fd);
-        return;
+        break;
       }
 
       readBytes += read;
@@ -111,11 +115,26 @@ ClientThread(void *_fd)
             pollElem.in_flags = PR_POLL_WRITE | PR_POLL_EXCEPT;
           }  else if (memcmp(buf, TCP_performanceFromClientToServer, 6) == 0) {
             testType = 4;
+
+            // Get file name.
+            char fileName[FILE_NAME_LEN];
+            memcpy(fileName, buf + FILE_NAME_START, FILE_NAME_LEN);
+            LOG(("File name: %s", fileName));
+            logFile = OpenTmpFileForDataCollection(fileName);
+            LogLogFormat(logFile);
+            if (logFile) {
+              sprintf(logstr, "%lu START TEST 4 %lu\n",
+                      (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                      (unsigned long)readBytes);
+              PR_Write(logFile, logstr, strlen(logstr));
+            }
+
             // Receive data.
             pollElem.in_flags = PR_POLL_READ | PR_POLL_EXCEPT;
+
           } else {
             LOG(("NetworkTest TCP server side: Test not implemented"));
-            return;
+            break;
           }
           if (!timeFirstPktReceived) {
             timeFirstPktReceived = PR_IntervalNow();
@@ -127,8 +146,16 @@ ClientThread(void *_fd)
         case 3:
           LOG(("NetworkTest TCP server side: We should not receive any more "
                "data in test %d.", testType));
-          return;
+          break;
         case 4:
+          // Log data.
+          if (logFile) {
+            sprintf(logstr, "%lu RECV %lu\n",
+                    (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                    (unsigned long)read);
+            PR_Write(logFile, logstr, strlen(logstr));
+          }
+
           if (PR_IntervalToSeconds(PR_IntervalNow() - timeFirstPktReceived) >=
               2) {
             recvBytesForRate += read;
@@ -136,18 +163,18 @@ ClientThread(void *_fd)
               startRateCalc = PR_IntervalNow();
             }
           }
-          if ((readBytes >= maxBytes) &&
+          if ((readBytes >= MAXBYTES) &&
               (PR_IntervalToSeconds(PR_IntervalNow() - timeFirstPktReceived) >=
                4)) {
             uint64_t rate;
             if (PR_IntervalToSeconds(PR_IntervalNow() - startRateCalc)) {
-              rate = (double)recvBytesForRate / 1500.0 /
+              rate = (double)recvBytesForRate / PAYLOADSIZEF /
                 (double)PR_IntervalToMilliseconds(PR_IntervalNow() - startRateCalc) *
                 1000.0;
             }
             LOG(("NetworkTest TCP server side: Test 4 should treminate - "
                  "we have received enough data. Rate: %lu", rate));
-            pktPerSec = htonl(rate);
+            pktPerSec = htonll(rate);
             pollElem.in_flags = PR_POLL_WRITE | PR_POLL_EXCEPT;
             LOG(("Test 4 finished: time %lu, first packet sent %lu, "
                  "duration %lu, received %llu max to received %llu, received "
@@ -155,12 +182,12 @@ ClientThread(void *_fd)
                  PR_IntervalNow(),
                  timeFirstPktReceived,
                  PR_IntervalToMilliseconds(PR_IntervalNow() - timeFirstPktReceived),
-                 readBytes, maxBytes, recvBytesForRate,
+                 readBytes, MAXBYTES, recvBytesForRate,
                  PR_IntervalNow() - startRateCalc));
           }
           break;
         default:
-          return;
+          break;
       }
     } else  if (pollElem.out_flags & PR_POLL_WRITE) {
 
@@ -182,14 +209,21 @@ ClientThread(void *_fd)
           continue;
         }
         LogErrorWithCode(errCode, "TCP");
-        PR_Close(fd);
-        return;
+        break;
       }
       writtenBytes += written;
       if ((testType == 2 || testType == 4) && (writtenBytes >= bufLen)) {
         pollElem.in_flags = PR_POLL_EXCEPT;
       }
     }
+  }
+
+  if (fd) {
+    PR_Close(fd);
+  }
+
+  if (logFile) {
+    PR_Close(logFile);
   }
 }
 
