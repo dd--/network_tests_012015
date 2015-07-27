@@ -1,10 +1,8 @@
 self.port.on("reachability", function(result) {
-console.log("gotovo 2");
 
   var ports = JSON.parse(result[0]);
   var tcps = JSON.parse(result[1]);
   var udps = JSON.parse(result[2]);
-  dump("DDDDD 1 "+ ports+ " "+ ports[0] +" "+ tcps[1] +"\n");
 
   var test = document.getElementById("reachability");
   test.innerHTML = "Reachability test finished";
@@ -34,4 +32,58 @@ console.log("gotovo 2");
   testResults.appendChild(tcpDesc);
   testResults.appendChild(tcpList);
 
+});
+
+self.port.on("rateTestFinished", function(result) {
+
+  var tcpS = JSON.parse(result[0]);
+  var udpS = JSON.parse(result[1]);
+  var tcpC = JSON.parse(result[2]);
+  var udpC = JSON.parse(result[3]);
+
+  var tcpSstr = "";
+  var udpSstr = "";
+  var tcpCstr = "";
+  var udpCstr = "";
+
+  for (var i = 0; i < tcpS.length; i++) {
+    tcpSstr += tcpS[i];
+    udpSstr += tcpS[i];
+    tcpCstr += tcpS[i];
+    udpCstr += tcpS[i];
+
+    if (i != tcpS.length - 1) {
+      tcpSstr += ", ";
+      udpSstr += ", ";
+      tcpCstr += ", ";
+      udpCstr += ", ";
+    }
+  }
+
+  var test = document.getElementById("rate");
+  test.innerHTML = "Rate test finished";
+
+  var desc1 = document.createElement("p");
+  desc1.innerHTML = "Sending from the server to the client: ";
+
+  var udpSDesc = document.createElement("p");
+  udpSDesc.innerHTML = "UDP rate: " + udpSstr;
+  var tcpSDesc = document.createElement("p");
+  tcpSDesc.innerHTML = "TCP rate: " + tcpSstr;
+
+  var desc2 = document.createElement("p");
+  desc2.innerHTML = "Sending from the client to the server: ";
+
+  var udpCDesc = document.createElement("p");
+  udpCDesc.innerHTML = "UDP rate: " + udpCstr;
+  var tcpCDesc = document.createElement("p");
+  tcpCDesc.innerHTML = "TCP rate: " + tcpCstr;
+
+  var testResults = document.getElementById("rateResults");
+  testResults.appendChild(desc1);
+  testResults.appendChild(udpSDesc);
+  testResults.appendChild(tcpSDesc);
+  testResults.appendChild(desc2);
+  testResults.appendChild(udpCDesc);
+  testResults.appendChild(tcpCDesc);
 });

@@ -53,6 +53,13 @@ NetworkTestImp::AllTests()
     mUDPReachabilityResults[inx] = false;
   }
 
+  for (int inx = 0; inx < kNumberOfRepeats; ++inx){
+    mTCPFromServerRates[inx] = 0;
+    mUDPFromServerRates[inx] = 0;
+    mTCPToServerRates[inx] = 0;
+    mUDPToServerRates[inx] = 0;
+  }
+
   mIter = nullptr;
 
   bool complete = false;
@@ -70,9 +77,17 @@ NetworkTestImp::AllTests()
   // should probably record if this is v4/v6
   // should probably separate out reports from same client
 
+  {
+    char host[164] = {0};
+    PR_NetAddrToString(&addr, host, sizeof(host));
+    LOG(("Get host: %s", host));
+  }
+
   UdpReachability(&addr);
 
   TcpReachability(&addr);
+
+  NS_DispatchToMainThread(NS_NewRunnableMethod(this, &NetworkTestImp::ReachabilityTestsFinished));
 
   { // scoping for declaration and goto
     int portInx = -1;
@@ -125,9 +140,30 @@ NetworkTestImp::TestsFinished()
     mThread->Shutdown();
   }
 
-  nsCOMPtr<NetworkTestListener> callback;
-  callback.swap(mCallback);
-  callback->TestsFinished();
+  if (mCallback) {
+    nsCOMPtr<NetworkTestListener> callback;
+    callback.swap(mCallback);
+    callback->TestsFinished(kNumberOfRepeats,
+                            mTCPFromServerRates,
+                            mUDPFromServerRates,
+                            mTCPToServerRates,
+                            mUDPToServerRates);
+  }
+}
+
+void
+NetworkTestImp::ReachabilityTestsFinished()
+{
+  LOG(("DDDD send not 1"));
+  if (mCallback) {
+  LOG(("DDDD send not 2"));
+    nsCOMPtr<NetworkTestListener> callback;
+    callback = mCallback;
+    callback->ReachabilityTestsFinished(kNumberOfPorts,
+                                        const_cast<uint16_t*>(mPorts),
+                                        mTCPReachabilityResults,
+                                        mUDPReachabilityResults);
+  }
 }
 
 int
@@ -231,7 +267,7 @@ NetworkTestImp::UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
   id.ToProvidedString(idString);
   idString[NSID_LENGTH-2] = '\0';
 
-  for (int iter = 0; iter < 2; iter++) {
+  for (int iter = 0; iter < kNumberOfRepeats; iter++) {
     rv = tcp.Start(3,
                    nsPrintfCString("%s_test3_itr%d", idString + 1, iter));
     LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
@@ -252,6 +288,8 @@ NetworkTestImp::UdpVsTcpPerformanceFromServerToClient(PRNetAddr *aNetAddr,
     LOG(("NetworkTest: Testing UDP vs TCP performance from the server to the "
          " client on port %d iteration %d - achieved udp rate: %llu",
          aRemotePort, iter, udp.GetRate()));
+    mTCPFromServerRates[iter] = tcp.GetRate();
+    mUDPFromServerRates[iter] = udp.GetRate();
   }
   return rv;
 }
@@ -278,7 +316,7 @@ NetworkTestImp::UdpVsTcpPerformanceFromClientToServer(PRNetAddr *aNetAddr,
   id.ToProvidedString(idString);
   idString[NSID_LENGTH-2] = '\0';
 
-  for (int iter = 0; iter < 2; iter++) {
+  for (int iter = 0; iter < kNumberOfRepeats; iter++) {
     rv = tcp.Start(4,
                    nsPrintfCString("%s_test4_itr%d", idString + 1, iter));
     LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
@@ -301,6 +339,8 @@ NetworkTestImp::UdpVsTcpPerformanceFromClientToServer(PRNetAddr *aNetAddr,
     LOG(("NetworkTest: Testing UDP vs TCP performance from the client to the "
          "server on port %d iteration %d - achieved udp rate: %llu",
          aRemotePort, iter, udp.GetRate()));
+    mTCPToServerRates[iter] = tcp.GetRate();
+    mUDPToServerRates[iter] = udp.GetRate();
   }
   return rv;
 }

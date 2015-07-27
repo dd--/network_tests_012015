@@ -15,7 +15,9 @@
    "packageName": "network-test", 
    "requirements": {
     "chrome": "chrome",
-    "sdk/tabs": "sdk/tabs", 
+    "sdk/tabs": "sdk/tabs",
+    "sdk/page-mod": "sdk/page-mod",
+    "sdk/self": "sdk/self",
     "sdk/ui/button/action": "sdk/ui/button/action"
    }, 
    "sectionName": "lib"
@@ -35,7 +37,7 @@
    ], 
    "license": "MPL 2.0", 
    "name": "addon-sdk"
-  }, 
+  },
   "network-test": {
    "author": "dragana", 
    "description": "network path tester", 

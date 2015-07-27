@@ -16,7 +16,7 @@
 
 namespace NetworkPath {
 
-class NetworkTestImp MOZ_FINAL : public NetworkTest
+class NetworkTestImp final : public NetworkTest
 {
 public:
   NS_DECL_THREADSAFE_ISUPPORTS
@@ -29,6 +29,7 @@ public:
 private:
   static const int kNumberOfPorts = 5;
   static const uint16_t mPorts[kNumberOfPorts];
+  static const int kNumberOfRepeats = 10;
 
   ~NetworkTestImp();
   int GetHostAddr(nsAutoCString &aAddr);
@@ -42,10 +43,15 @@ private:
                                                  uint16_t aRemotePort);
 
   void TestsFinished();
+  void ReachabilityTestsFinished();
   PRAddrInfo *mAddrInfo;
   void *mIter;
   bool mTCPReachabilityResults[kNumberOfPorts];
   bool mUDPReachabilityResults[kNumberOfPorts];
+  uint64_t mTCPFromServerRates[kNumberOfRepeats];
+  uint64_t mUDPFromServerRates[kNumberOfRepeats];
+  uint64_t mTCPToServerRates[kNumberOfRepeats];
+  uint64_t mUDPToServerRates[kNumberOfRepeats];
   nsCOMPtr<NetworkTestListener> mCallback;
   nsCOMPtr<nsIThread> mThread;
   nsCOMPtr<nsIUUIDGenerator> mUUIDGenerator;

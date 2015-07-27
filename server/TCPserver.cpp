@@ -315,7 +315,7 @@ TCPserver::Init(uint16_t aPort, int aInx)
   status = PR_SetSocketOption(mFds[aInx], &opt);
   if (status != PR_SUCCESS) {
     LogError("TCP");
-    return -1;
+  //  return -1;
   }
 
   LOG(("NetworkTest TCP server side: Socket options set."));

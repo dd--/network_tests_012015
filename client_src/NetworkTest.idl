@@ -18,7 +18,15 @@ interface NetworkTest : nsISupports
 interface NetworkTestListener : nsISupports
 {
   /* todo a string or nsresult or something would help here */
-  void testsFinished();
+  void testsFinished(in unsigned long aCount,
+                     [array, size_is(aCount)] in unsigned long long aTCPFromServerRates,
+                     [array, size_is(aCount)] in unsigned long long aUDPFromServerRates,
+                     [array, size_is(aCount)] in unsigned long long aTCPToServerRates,
+                     [array, size_is(aCount)] in unsigned long long aUDPToServerRates);
+  void reachabilityTestsFinished(in unsigned long aCount,
+                                 [array, size_is(aCount)] in unsigned short aPort,
+                                 [array, size_is(aCount)] in bool aTCPReachable,
+                                 [array, size_is(aCount)] in bool aUDPReachable);
 };
 
 %{C++
@@ -27,10 +35,10 @@ interface NetworkTestListener : nsISupports
   "@mozilla.org/network-test;1"
 #define NETWORKTEST_CID                             \
 {                                                   \
-  0xacd7dbad,                                       \
-  0x38b1,                                           \
-  0x4194,                                           \
-  {0xa9, 0x07, 0xfa, 0xa1, 0xb8, 0x59, 0x3f, 0x16}  \
+  0xf0b4bcb,                                       \
+  0x6d4e,                                           \
+  0x4b22,                                           \
+  {0xb9, 0x1f, 0xd1, 0x77, 0x37, 0x54, 0x94, 0x90}  \
 }
 
 %}
