@@ -12,6 +12,5 @@
 
 int LogErrorWithCode(PRErrorCode errCode, const char *aType);
 int LogError(const char *aType);
-PRFileDesc* OpenTmpFileForDataCollection(char *aFileName);
 
 #endif

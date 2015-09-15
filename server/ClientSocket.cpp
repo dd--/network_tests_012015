@@ -69,7 +69,6 @@ ClientSocket::ClientSocket(PRNetAddr *aAddr)
   , mPktInterval(0)
   , mNextToSendInns(0)
   , mNextPktId(0)
-  , mLogFile(NULL)
   , mPhase(START_TEST)
 {
   memcpy(&mNetAddr, aAddr, sizeof(PRNetAddr));
@@ -80,9 +79,7 @@ ClientSocket::ClientSocket(PRNetAddr *aAddr)
 
 ClientSocket::~ClientSocket()
 {
-  if (mLogFile) {
-    PR_Close(mLogFile);
-  }
+  mLogFile.Done();
 }
 int
 ClientSocket::MaybeSendSomethingOrCheckFinish(PRFileDesc *aFd,
@@ -116,10 +113,7 @@ ClientSocket::MaybeSendSomethingOrCheckFinish(PRFileDesc *aFd,
   }
 
   if (mPhase == TEST_FINISHED) {
-    if (mLogFile) {
-      PR_Close(mLogFile);
-      mLogFile = NULL;
-    }
+    mLogFile.Done();
     aClientFinished = true;
   }
   return rv;
@@ -179,6 +173,7 @@ ClientSocket::RunTestSend(PRFileDesc *aFd)
                     (unsigned long)PR_IntervalToMilliseconds(now),
                     (unsigned long)mNextPktId,
                     (unsigned long)PR_IntervalToMilliseconds(mNextTimeToDoSomething));
+            mLogFile.WriteNonBlocking(mLogstr, strlen(mLogstr));
 
           } else {
             // Calculate time to do something.
@@ -191,7 +186,7 @@ ClientSocket::RunTestSend(PRFileDesc *aFd)
                     (unsigned long)mNextPktId,
                     (unsigned long)PR_IntervalToMilliseconds(mNextTimeToDoSomething));
           }
-          PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+          mLogFile.WriteBlocking(mLogstr, strlen(mLogstr));
 
           mNextPktId++;
           if (mFirstPktSent == 0) {
@@ -232,7 +227,7 @@ ClientSocket::SendFinishPacket(PRFileDesc *aFd)
   mSentBytes += count;
 
   sprintf(mLogstr, "%lu FIN\n", (unsigned long)PR_IntervalToMilliseconds(now));
-  PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+  mLogFile.WriteBlocking(mLogstr, strlen(mLogstr));
 
   LOG(("NetworkTest UDP sever side: Sending data for test %d"
        " - sent %lu bytes - received %lu bytes.",
@@ -379,7 +374,7 @@ ClientSocket::FirstPacket(int32_t aCount, char *aBuf, PRIntervalTime received)
       mNextTimeToDoSomething = received;
       sprintf(mLogstr, "%lu START TEST 5 DUP\n",
               (unsigned long)PR_IntervalToMilliseconds(received));
-      PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+      mLogFile.WriteBlocking(mLogstr, strlen(mLogstr));
     } else if (mTestType == 6) {
       mAcksToSend.push_back(Ack(aBuf, received, 0, 0));
     }
@@ -391,10 +386,7 @@ ClientSocket::FirstPacket(int32_t aCount, char *aBuf, PRIntervalTime received)
   // If the last test is in WAIT_FINISH_TIMEOUT or not finished properly close
   // the report.
   if (mTestType != 0) {
-    if (mLogFile) {
-      PR_Close(mLogFile);
-      mLogFile = NULL;
-    }
+    mLogFile.Done();
   }
 
   // reset
@@ -450,8 +442,7 @@ ClientSocket::FirstPacket(int32_t aCount, char *aBuf, PRIntervalTime received)
     mPhase = RUN_TEST;
     LOG(("NetworkTest UDP server side: Test %d: rate %d interval %lf.",
          mTestType, mPktPerSec, mPktInterval));
-    mLogFile = OpenTmpFileForDataCollection(mLogFileName);
-    if (!mLogFile) {
+    if (mLogFile.Init(mLogFileName) < 0) {
       mError = true;
       mPhase = TEST_FINISHED;
       return 0;
@@ -461,7 +452,7 @@ ClientSocket::FirstPacket(int32_t aCount, char *aBuf, PRIntervalTime received)
     sprintf(mLogstr, "%lu START TEST 5: rate %lu\n",
             (unsigned long)PR_IntervalToMilliseconds(received),
             (unsigned long)ntohl(npktpersec));
-    PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+    mLogFile.WriteBlocking(mLogstr, strlen(mLogstr));
 
   } else if (memcmp(aBuf + TYPE_START, UDP_performanceFromClientToServer,
                     TYPE_LEN) == 0) {
@@ -531,7 +522,7 @@ ClientSocket::ReadACKPktAndLog(char *aBuf, uint32_t aTS)
           (unsigned long)ts,
           (unsigned long)ntohl(usecReceived),
           (unsigned long)ntohl(usecACKSent));
-  PR_Write(mLogFile, mLogstr, strlen(mLogstr));
+  mLogFile.WriteNonBlocking(mLogstr, strlen(mLogstr));
   return pktId;
 }
 
@@ -543,14 +534,14 @@ ClientSocket::LogLogFormat()
                  "                        sent(this is for the analysis whether the gap between\n"
                  "                        the time it should have been sent and the time it was\n"
                  "                        sent is too large)]\n";
-  PR_Write(mLogFile, line1, strlen(line1));
+  mLogFile.WriteBlocking(line1, strlen(line1));
 
   char line2[] = "The last packet has the same format as data packet\n";
-  PR_Write(mLogFile, line2, strlen(line2));
+  mLogFile.WriteBlocking(line2, strlen(line2));
 
   char line3[] = "An ACK has been received: [timestamp ack was received] ACK [pkt id]\n"
                  "                          [timestamp data pkt was sent by the sender (this\n"
                  "                          host)] [time when data packet was received by the\n"
                  "                          receiver] [time when ack was sent by the receiver]";
-  PR_Write(mLogFile, line3, strlen(line3));
+  mLogFile.WriteBlocking(line3, strlen(line3));
 }

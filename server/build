@@ -1,2 +1,2 @@
-MOZBUILDDIR=../../obj-debug/
-g++ -Wall ./ServerSide.cpp ./Ack.cpp ./HelpFunctions.cpp ./ClientSocket.cpp ./TCPserver.cpp ./UDPserver.cpp -o ./ServerSide -I$MOZBUILDDIR/dist/nspr-include/ -L$MOZBUILDDIR/nsprpub/pr/src -lnspr4 -g -DDEBUG
+MOZBUILDDIR=../../gecko-dev/obj-debug/
+g++ -std=c++11 -Wall ./ServerSide.cpp ./Ack.cpp ./HelpFunctions.cpp ./ClientSocket.cpp ./TCPserver.cpp ./UDPserver.cpp ./FileWriter.cpp -o ./ServerSide -I$MOZBUILDDIR/dist/nspr-include/ -L$MOZBUILDDIR/nsprpub/pr/src -lnspr4 -g -DDEBUG

@@ -8,6 +8,7 @@
 #include "prnetdb.h"
 #include "TCPserver.h"
 #include "HelpFunctions.h"
+#include "FileWriter.h"
 #include "prlog.h"
 #include "prthread.h"
 #include "prmem.h"
@@ -26,13 +27,13 @@ extern PRLogModuleInfo* gServerTestLog;
 #define ntohll(x) ((1==ntohl(1)) ? (x) : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
 
 void
-LogLogFormat(PRFileDesc * aFile)
+LogLogFormat(FileWriter *aFile)
 {
   char line1[] = "Data pkt has been recevied: [timestamp pkt received] RECV [bytes received]\n";
-  PR_Write(aFile, line1, strlen(line1));
+  aFile->WriteBlocking(line1, strlen(line1));
 
   char line2[] = "The last packet has been sent: [timestamp pkt sent] RECV [bytes sent]\n";
-  PR_Write(aFile, line2, strlen(line2));
+  aFile->WriteBlocking(line2, strlen(line2));
 }
 
 static void PR_CALLBACK
@@ -54,12 +55,13 @@ ClientThread(void *_fd)
   PRIntervalTime timeFirstPktReceived = 0;
   PRIntervalTime startRateCalc = 0;
   uint64_t pktPerSec = 0;
-  PRFileDesc *logFile;
+  FileWriter logFile;
+  int64_t fileLen;
   char logstr[80];
 
   while (1) {
     pollElem.out_flags = 0;
-    int rv = PR_Poll(&pollElem, 1, 1000);
+    int rv = PR_Poll(&pollElem, 1, 10000);
     if (rv < 0) {
       LogError("TCP");
       LOG(("NetworkTest TCP server side: Poll error [fd=%p]. Sent %lu bytes, "
@@ -101,36 +103,68 @@ ClientThread(void *_fd)
 //           PR_IntervalNow() - timeFirstPktReceived, testType, readBytes));
 
       // Wait to get the complete first packet.
-      if (readBytes < bufLen) {
-        continue;
+      if (testType == 0) {
+        if ((readBytes < bufLen) &&
+            !((readBytes >= TCP_DATA_START) &&
+             (memcmp(buf + TCP_TYPE_START, SENDRESULTS, TCP_TYPE_LEN) == 0))) {
+          continue;
+        }
       }
       switch (testType) {
         case 0:
-          if (memcmp(buf, TCP_reachability, 6) == 0) {
+          if (memcmp(buf + TCP_TYPE_START, TCP_reachability,
+                     TCP_TYPE_LEN) == 0) {
             testType = 2;
             pollElem.in_flags = PR_POLL_WRITE | PR_POLL_EXCEPT;
-          } else if (memcmp(buf, TCP_performanceFromServerToClient, 6) == 0) {
+          } else if (memcmp(buf + TCP_TYPE_START,
+                            TCP_performanceFromServerToClient,
+                            TCP_TYPE_LEN) == 0) {
             testType = 3;
             // Sending data.
             pollElem.in_flags = PR_POLL_WRITE | PR_POLL_EXCEPT;
-          }  else if (memcmp(buf, TCP_performanceFromClientToServer, 6) == 0) {
+          }  else if (memcmp(buf + TCP_TYPE_START,
+                             TCP_performanceFromClientToServer,
+                             TCP_TYPE_LEN) == 0) {
             testType = 4;
 
             // Get file name.
-            char fileName[FILE_NAME_LEN];
-            memcpy(fileName, buf + FILE_NAME_START, FILE_NAME_LEN);
+            char fileName[TCP_FILE_NAME_LEN];
+            memcpy(fileName, buf + TCP_FILE_NAME_START, TCP_FILE_NAME_LEN);
             LOG(("File name: %s", fileName));
-            logFile = OpenTmpFileForDataCollection(fileName);
-            LogLogFormat(logFile);
-            if (logFile) {
-              sprintf(logstr, "%lu START TEST 4 %lu\n",
-                      (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
-                      (unsigned long)readBytes);
-              PR_Write(logFile, logstr, strlen(logstr));
-            }
+            logFile.Init(fileName);
+
+            LogLogFormat(&logFile);
+            sprintf(logstr, "%lu START TEST 4 %lu\n",
+                    (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                    (unsigned long)readBytes);
+            logFile.WriteNonBlocking(logstr, strlen(logstr));
 
             // Receive data.
             pollElem.in_flags = PR_POLL_READ | PR_POLL_EXCEPT;
+
+          } else if (memcmp(buf + TCP_TYPE_START,
+                            SENDRESULTS,
+                            TCP_TYPE_LEN) == 0) {
+            testType = 7;
+            char fileName[TCP_FILE_NAME_LEN];
+            memcpy(fileName, buf + TCP_FILE_NAME_START, TCP_FILE_NAME_LEN);
+            uint64_t size;
+            memcpy(&size, buf + TCP_DATA_LEN_START, TCP_DATA_LEN_LEN);
+            fileLen = ntohll(size);
+            LOG(("File name: %s, size: %lu", fileName, fileLen));
+            logFile.Init(fileName);
+
+            // Receive data.
+            pollElem.in_flags = PR_POLL_READ | PR_POLL_EXCEPT;
+            if (fileLen < (read - TCP_DATA_START)) {
+              logFile.WriteBlocking(buf + TCP_DATA_START,
+                                    fileLen);
+              logFile.Done();
+              return;
+            }  else {
+              logFile.WriteBlocking(buf + TCP_DATA_START,
+                                     read - TCP_DATA_START);
+            }
 
           } else {
             LOG(("NetworkTest TCP server side: Test not implemented"));
@@ -149,12 +183,10 @@ ClientThread(void *_fd)
           break;
         case 4:
           // Log data.
-          if (logFile) {
-            sprintf(logstr, "%lu RECV %lu\n",
-                    (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
-                    (unsigned long)read);
-            PR_Write(logFile, logstr, strlen(logstr));
-          }
+          sprintf(logstr, "%lu RECV %lu\n",
+                  (unsigned long)PR_IntervalToMilliseconds(PR_IntervalNow()),
+                  (unsigned long)read);
+          logFile.WriteNonBlocking(logstr, strlen(logstr));
 
           if (PR_IntervalToSeconds(PR_IntervalNow() - timeFirstPktReceived) >=
               2) {
@@ -184,6 +216,14 @@ ClientThread(void *_fd)
                  PR_IntervalToMilliseconds(PR_IntervalNow() - timeFirstPktReceived),
                  readBytes, MAXBYTES, recvBytesForRate,
                  PR_IntervalNow() - startRateCalc));
+          }
+          break;
+        case 7:
+          logFile.WriteBlocking(buf, read);
+          fileLen -= read;
+          if (fileLen <= 0) {
+            logFile.Done();
+            return;
           }
           break;
         default:
@@ -220,10 +260,6 @@ ClientThread(void *_fd)
 
   if (fd) {
     PR_Close(fd);
-  }
-
-  if (logFile) {
-    PR_Close(logFile);
   }
 }
 

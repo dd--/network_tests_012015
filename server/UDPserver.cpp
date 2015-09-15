@@ -115,7 +115,6 @@ UDPSocketThread(void *_port)
       int32_t count;
       count = PR_RecvFrom(fd, buf, PAYLOADSIZE, 0, &prAddr,
                           PR_INTERVAL_NO_WAIT);
-
       if (count < 0) {
         PRErrorCode code = PR_GetError();
         if (code == PR_WOULD_BLOCK_ERROR) {

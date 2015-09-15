@@ -9,6 +9,7 @@
 
 #include "Ack.h"
 #include "config.h"
+#include "FileWriter.h"
 #include "prnetdb.h"
 #include <vector>
 
@@ -59,7 +60,7 @@ private:
   PRIntervalTime mLastReceivedTimeout;
   bool mError;
 
-  PRFileDesc *mLogFile;
+  FileWriter mLogFile;
   char mLogFileName[FILE_NAME_LEN];
 
   enum PHASE {
